@@ -8,6 +8,7 @@ import {
   createTitle,
   createTypedIdentifier,
   buildDateFilter,
+  inferAccessRights,
 } from '../utils/formatters.js';
 import {
   PUBLICATION_TYPE_MAP,
@@ -21,9 +22,10 @@ const ENTITY_TYPE = 'Publications';
  * Mapea una publicacion a formato CERIF Publication
  * @param {object} row
  * @param {Array} authors
+ * @param {Array} keywords
  * @returns {object}
  */
-function mapToCerif(row, authors = []) {
+function mapToCerif(row, authors = [], keywords = []) {
   const typeUri = PUBLICATION_TYPE_MAP[row.tipo_publicacion] || PUBLICATION_TYPE_MAP.default;
 
   const publication = {
@@ -133,6 +135,20 @@ function mapToCerif(row, authors = []) {
     publication.countryCode = row.pais_codigo;
   }
 
+  // Access Rights (Campo M - Obligatorio)
+  const access = inferAccessRights(row);
+  publication.access = {
+    '@xmlns': VOCABULARIES.COAR_ACCESS_RIGHTS,
+    '#text': access.uri,
+  };
+
+  // Keywords (Recomendado)
+  if (keywords.length > 0) {
+    publication.keywords = keywords.map(kw => ({
+      value: kw.palabra_clave,
+    }));
+  }
+
   return publication;
 }
 
@@ -186,6 +202,13 @@ export async function getPublications({ from, until, offset = 0, limit = env.PAG
       ORDER BY pa.orden ASC
     `, [pub.id]);
 
+    // Obtener keywords
+    const [keywords] = await pool.query(`
+      SELECT clave as palabra_clave
+      FROM Publicacion_palabra_clave
+      WHERE publicacion_id = ?
+    `, [pub.id]);
+
     results.push({
       header: {
         identifier: toOAIIdentifier(ENTITY_TYPE, pub.id),
@@ -193,7 +216,7 @@ export async function getPublications({ from, until, offset = 0, limit = env.PAG
         setSpec: 'publications',
       },
       metadata: {
-        Publication: mapToCerif(pub, authors),
+        Publication: mapToCerif(pub, authors, keywords),
       },
     });
   }
@@ -256,6 +279,13 @@ export async function getPublicationById(id) {
     ORDER BY pa.orden ASC
   `, [id]);
 
+  // Obtener keywords
+  const [keywords] = await pool.query(`
+    SELECT clave as palabra_clave
+    FROM Publicacion_palabra_clave
+    WHERE publicacion_id = ?
+  `, [id]);
+
   return {
     header: {
       identifier: toOAIIdentifier(ENTITY_TYPE, pub.id),
@@ -263,7 +293,7 @@ export async function getPublicationById(id) {
       setSpec: 'publications',
     },
     metadata: {
-      Publication: mapToCerif(pub, authors),
+      Publication: mapToCerif(pub, authors, keywords),
     },
   };
 }

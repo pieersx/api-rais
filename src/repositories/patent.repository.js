@@ -7,6 +7,7 @@ import {
   filterEmpty,
   createTitle,
   buildDateFilter,
+  inferIPCClassification,
 } from '../utils/formatters.js';
 import {
   PATENT_TYPE_MAP,
@@ -91,6 +92,18 @@ function mapToCerif(row, inventors = []) {
 
   // Idioma
   patent.language = ['es'];
+
+  // Subject - Clasificación IPC (Campo M - Obligatorio)
+  const ipcClassification = inferIPCClassification(row);
+  patent.subject = [{
+    scheme: ipcClassification.scheme,
+    value: ipcClassification.value,
+  }];
+
+  // Nota si la clasificación fue inferida y requiere curación
+  if (ipcClassification.note) {
+    patent.notes = [ipcClassification.note];
+  }
 
   return patent;
 }

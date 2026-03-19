@@ -127,6 +127,89 @@ export const PATENT_TYPE_MAP = {
   'default': 'http://purl.org/coar/resource_type/9DKX-KSAF',
 };
 
+// Mapeo de palabras clave a clasificación IPC para patentes
+// NOTA: Mantener orden de ESPECÍFICO a GENERAL para evitar coincidencias erradas
+export const PATENT_IPC_BY_KEYWORDS = [
+  // Electricidad y energía (H02) - MÁS ESPECÍFICO primero
+  ['motor eléctrico|generador eléctrico|máquina eléctrica', 'H02K'],
+  ['transformador|convertidor|alimentación|rectificador', 'H02M'],
+  ['circuito eléctrico|electrónica|semiconductor|diodo|transistor', 'H01L'],
+  
+  // Construcción y edificación (E04)
+  ['construcción|edificio|cemento|concreto|mampostería|estructura', 'E04B'],
+  ['techo|cubierta|tejado|losa', 'E04D'],
+  
+  // Ingeniería mecánica (F16) - MENOS ESPECÍFICO
+  ['engranaje|transmisión|acople', 'F16H'],
+  ['cojinete|rodamiento|eje|chumacera', 'F16C'],
+  ['válvula|grifo|compuerta|llave', 'F16K'],
+  ['tubería|conducto|conexión|manguera', 'F16L'],
+  ['motor|máquina|mecanismo', 'F16H'], // Genérico - va al final
+  
+  // Transporte (B62)
+  ['bicicleta|motocicleta|mototaxi', 'B62K'],
+  ['vehículo|auto|carrocería|chasis|bastidor', 'B62D'],
+  ['rueda|llanta|freno', 'B62K'],
+  
+  // Química y materiales (C01-C08)
+  ['aleación|metal|tratamiento térmico', 'C22C'],
+  ['plástico|polímero|resina|elastómero', 'C08L'],
+  ['composición|compuesto|material|sustancia', 'C01B'],
+  
+  // Salud y medicina (A61)
+  ['medicamento|fármaco|composición farmacéutica|fórmula', 'A61K'],
+  ['dispositivo médico|prótesis|implante|catéter', 'A61F'],
+  ['diagnóstico|tratamiento|terapia|método quirúrgico', 'A61B'],
+  
+  // Agricultura (A01)
+  ['maquinaria agrícola|tractor|cosechadora|arado', 'A01B'],
+  ['cultivo|planta|semilla|fertilizante|abono', 'A01G'],
+  
+  // Procesamiento de datos (G06)
+  ['computadora|software|algoritmo|procesamiento|código', 'G06F'],
+  ['sistema de información|base de datos|aplicación', 'G06F'],
+  
+  // Física e instrumentación (G01)
+  ['medición|sensor|detector|instrumento|calibración', 'G01N'],
+  ['control|regulación|monitoreo|automatización', 'G05B'],
+];
+
+// Acceso a publicaciones (COAR Access Rights)
+export const ACCESS_RIGHTS = {
+  OPEN_ACCESS: {
+    uri: 'http://purl.org/coar/access_right/c_abf2',
+    label: 'open access',
+  },
+  EMBARGOED_ACCESS: {
+    uri: 'http://purl.org/coar/access_right/c_f1cf',
+    label: 'embargoed access',
+  },
+  RESTRICTED_ACCESS: {
+    uri: 'http://purl.org/coar/access_right/c_16ec',
+    label: 'restricted access',
+  },
+  METADATA_ONLY: {
+    uri: 'http://purl.org/coar/access_right/c_14cb',
+    label: 'metadata only access',
+  },
+};
+
+// Identificadores institucionales UNMSM
+export const UNMSM_IDENTIFIERS = {
+  ROR: 'https://ror.org/026zsd177',
+  RUC: '20106897914',
+  ISNI: '0000 0001 2107 4242',
+  GRID: 'grid.412881.4',
+  SCOPUS_AFFILIATION_ID: '60012091',
+};
+
+// Códigos geográficos y de clasificación UNMSM
+export const UNMSM_CODES = {
+  UBIGEO_LIMA: '150000', // Código INEI para Lima
+  CIIU_EDUCACION_SUPERIOR: '8530', // CIIU Rev. 4 - Educación universitaria
+  SECTOR_OCDE: '09', // Sector OCDE: Educación
+};
+
 // Roles en proyectos
 export const PROJECT_ROLES = {
   PRINCIPAL_INVESTIGATOR: 'PrincipalInvestigator',
