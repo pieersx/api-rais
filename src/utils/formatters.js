@@ -1,5 +1,5 @@
 import { OAI_DOMAIN } from '../config/env.js';
-import { ACCESS_RIGHTS, PATENT_IPC_BY_KEYWORDS } from './constants.js';
+import { ACCESS_RIGHTS, LEGACY_SET_ALIASES, PATENT_IPC_BY_KEYWORDS } from './constants.js';
 
 /**
  * Formatea una fecha a ISO 8601 (W3CDTF)
@@ -49,6 +49,16 @@ export function parseOAIIdentifier(oaiId) {
     entityType: match[2],
     id: match[3],
   };
+}
+
+/**
+ * Normaliza un setSpec legado a su valor canónico
+ * @param {string} setSpec
+ * @returns {string}
+ */
+export function normalizeSetSpec(setSpec) {
+  if (!setSpec) return setSpec;
+  return LEGACY_SET_ALIASES[setSpec] || setSpec;
 }
 
 /**
@@ -145,14 +155,17 @@ export function createTypedIdentifier(type, value) {
  * @returns {{ entityType: string, table: string }}
  */
 export function getEntityConfig(setSpec) {
+  const normalizedSet = normalizeSetSpec(setSpec);
   const configs = {
     persons: { entityType: 'Persons', table: 'Usuario_investigador' },
     orgunits: { entityType: 'OrgUnits', table: 'Facultad' },
     publications: { entityType: 'Publications', table: 'Publicacion' },
     projects: { entityType: 'Projects', table: 'Proyecto' },
     patents: { entityType: 'Patents', table: 'Patente' },
+    fundings: { entityType: 'Fundings', table: 'Proyecto' },
+    equipments: { entityType: 'Equipments', table: 'Grupo_infraestructura' },
   };
-  return configs[setSpec] || null;
+  return configs[normalizedSet] || null;
 }
 
 /**
@@ -244,7 +257,7 @@ export function inferIPCClassification(row) {
     if (regex.test(title)) {
       return {
         scheme: 'http://data.epo.org/linked-data/def/ipc/',
-        value: ipcCode,
+        value: `http://data.epo.org/linked-data/def/ipc/${ipcCode}`,
       };
     }
   }
@@ -253,7 +266,7 @@ export function inferIPCClassification(row) {
   if (type.includes('modelo de utilidad')) {
     return {
       scheme: 'http://data.epo.org/linked-data/def/ipc/',
-      value: 'F16H', // Elementos de máquinas
+      value: 'http://data.epo.org/linked-data/def/ipc/F16H', // Elementos de máquinas
       note: 'Clasificación inferida por tipo - requiere curación manual',
     };
   }
@@ -261,7 +274,7 @@ export function inferIPCClassification(row) {
   // Fallback: Clase técnica general
   return {
     scheme: 'http://data.epo.org/linked-data/def/ipc/',
-    value: 'Y10S', // Clase técnica general
+    value: 'http://data.epo.org/linked-data/def/ipc/Y10S', // Clase técnica general
     note: 'Clasificación genérica - requiere curación manual',
   };
 }

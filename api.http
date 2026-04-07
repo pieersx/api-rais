@@ -1,73 +1,82 @@
 ### =============================================================================
 ### RAIS-API - OAI-PMH 2.0 con CERIF JSON (PeruCRIS)
-### Pruebas de los 6 verbos OAI-PMH
+### Pruebas de los 6 verbos OAI-PMH y 7 sets PeruCRIS
 ### Registros seleccionados con datos mas completos segun directrices PeruCRIS
 ### =============================================================================
-
-@baseUrl = http://localhost:3000/oai
-@metadataPrefix = perucris-cerif
 
 ### =============================================================================
 ### 1. IDENTIFY - Informacion del repositorio
 ### =============================================================================
 
 ### Identify - Obtener informacion del repositorio
-GET {{baseUrl}}?verb=Identify
+GET http://localhost:3000/oai?verb=Identify
 
 ### =============================================================================
 ### 2. LIST METADATA FORMATS - Formatos de metadatos soportados
 ### =============================================================================
 
 ### ListMetadataFormats - Sin identificador (todos los formatos)
-GET {{baseUrl}}?verb=ListMetadataFormats
+GET http://localhost:3000/oai?verb=ListMetadataFormats
 
 ### ListMetadataFormats - Para un registro especifico
-GET {{baseUrl}}?verb=ListMetadataFormats&identifier=oai:rais.unmsm.edu.pe:Persons/166
+GET http://localhost:3000/oai?verb=ListMetadataFormats&identifier=oai:rais.unmsm.edu.pe:Persons/166
 
 ### =============================================================================
 ### 3. LIST SETS - Conjuntos disponibles
 ### =============================================================================
 
 ### ListSets - Obtener todos los sets disponibles
-GET {{baseUrl}}?verb=ListSets
+GET http://localhost:3000/oai?verb=ListSets
 
 ### =============================================================================
 ### 4. LIST IDENTIFIERS - Listado de identificadores por set
 ### =============================================================================
 
 ### --- PERSONS ---
-GET {{baseUrl}}?verb=ListIdentifiers&metadataPrefix={{metadataPrefix}}&set=persons
+GET http://localhost:3000/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=persons
 
 ### --- ORGUNITS ---
-GET {{baseUrl}}?verb=ListIdentifiers&metadataPrefix={{metadataPrefix}}&set=orgunits
+GET http://localhost:3000/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=orgunits
 
 ### --- PUBLICATIONS ---
-GET {{baseUrl}}?verb=ListIdentifiers&metadataPrefix={{metadataPrefix}}&set=publications
+GET http://localhost:3000/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=publications
 
 ### --- PROJECTS ---
-GET {{baseUrl}}?verb=ListIdentifiers&metadataPrefix={{metadataPrefix}}&set=projects
+GET http://localhost:3000/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=projects
+
+### --- FUNDINGS ---
+GET http://localhost:3000/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=fundings
+
+### --- EQUIPMENTS ---
+GET http://localhost:3000/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=equipments
 
 ### --- PATENTS ---
-GET {{baseUrl}}?verb=ListIdentifiers&metadataPrefix={{metadataPrefix}}&set=patents
+GET http://localhost:3000/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=patents
 
 ### =============================================================================
 ### 5. LIST RECORDS - Registros completos con metadatos CERIF
 ### =============================================================================
 
 ### --- PERSONS ---
-GET {{baseUrl}}?verb=ListRecords&metadataPrefix={{metadataPrefix}}&set=persons
+GET http://localhost:3000/oai?verb=ListRecords&metadataPrefix=perucris-cerif&set=persons
 
 ### --- ORGUNITS ---
-GET {{baseUrl}}?verb=ListRecords&metadataPrefix={{metadataPrefix}}&set=orgunits
+GET http://localhost:3000/oai?verb=ListRecords&metadataPrefix=perucris-cerif&set=orgunits
 
 ### --- PUBLICATIONS ---
-GET {{baseUrl}}?verb=ListRecords&metadataPrefix={{metadataPrefix}}&set=publications
+GET http://localhost:3000/oai?verb=ListRecords&metadataPrefix=perucris-cerif&set=publications
 
 ### --- PROJECTS ---
-GET {{baseUrl}}?verb=ListRecords&metadataPrefix={{metadataPrefix}}&set=projects
+GET http://localhost:3000/oai?verb=ListRecords&metadataPrefix=perucris-cerif&set=projects
+
+### --- FUNDINGS ---
+GET http://localhost:3000/oai?verb=ListRecords&metadataPrefix=perucris-cerif&set=fundings
+
+### --- EQUIPMENTS ---
+GET http://localhost:3000/oai?verb=ListRecords&metadataPrefix=perucris-cerif&set=equipments
 
 ### --- PATENTS ---
-GET {{baseUrl}}?verb=ListRecords&metadataPrefix={{metadataPrefix}}&set=patents
+GET http://localhost:3000/oai?verb=ListRecords&metadataPrefix=perucris-cerif&set=patents
 
 ### =============================================================================
 ### 6. GET RECORD - Registros individuales MAS COMPLETOS
@@ -80,15 +89,15 @@ GET {{baseUrl}}?verb=ListRecords&metadataPrefix={{metadataPrefix}}&set=patents
 
 ### Person ID=166: JAIME RAMIRO ALIAGA TOVAR
 ### Tiene: DNI, ORCID, Scopus (57931137000), ResearcherID (GGF-4924-2022)
-GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:rais.unmsm.edu.pe:Persons/166
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Persons/166
 
 ### Person ID=213: MABEL ALVARADO IBAÑEZ
 ### Tiene: DNI, ORCID, Scopus (45861174500), ResearcherID (AAB-3486-2021)
-GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:rais.unmsm.edu.pe:Persons/213
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Persons/213
 
 ### Person ID=215: DEBORA ELIZABETH ALVARADO RIVERA
 ### Tiene: DNI, ORCID, Scopus (36496392200), ResearcherID (E-9074-2017)
-GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:rais.unmsm.edu.pe:Persons/215
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Persons/215
 
 ### -----------------------------------------------------------------------------
 ### ORGUNIT - Jerarquia completa UNMSM > Facultad > Grupo
@@ -96,14 +105,14 @@ GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:
 ### -----------------------------------------------------------------------------
 
 ### Universidad (raiz) - UNMSM con RUC
-GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:rais.unmsm.edu.pe:OrgUnits/1
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:OrgUnits/1
 
 ### Facultad - Medicina (partOf -> UNMSM)
-GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:rais.unmsm.edu.pe:OrgUnits/F1
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:OrgUnits/F1
 
 ### Grupo de investigacion (partOf -> Facultad)
 ### Grupo ID=24: MAGNETISMO MODERNO, NANOMAGNETISMO Y ALEACIONES METALICAS
-GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:rais.unmsm.edu.pe:OrgUnits/G24
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:OrgUnits/G24
 
 ### -----------------------------------------------------------------------------
 ### PUBLICATION - Registros con todos los campos opcionales
@@ -112,49 +121,77 @@ GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:
 
 ### Publication ID=68172: Oral Care and Lifestyle Habits...
 ### Tiene: DOI, ISSN, revista, volumen, paginas (571-585), fecha 2025
-GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:rais.unmsm.edu.pe:Publications/68172
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Publications/40724
 
 ### Publication ID=68095: Analisis de la degradacion de suelos costeros...
 ### Tiene: DOI, ISSN, revista, volumen (22), paginas (79-88), fecha 2025
-GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:rais.unmsm.edu.pe:Publications/68095
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Publications/68095
 
 ### Publication ID=68071: Bibliometric Exploration of the Global Scientific...
 ### Tiene: DOI, ISSN, revista, volumen (16), paginas (354-358), fecha 2024
-GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:rais.unmsm.edu.pe:Publications/68071
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Publications/68071
 
 ### -----------------------------------------------------------------------------
 ### PROJECT - Registros con campos mas completos
-### Campos M: id, title, identifier, consortium | R: dates, status | O: OCDE, monto
+### Campos M: id, title, identifiers, participants, lastModified
 ### -----------------------------------------------------------------------------
 
 ### Project ID=13172: ECOTECH-MACAW (con monto S/ 989,809)
 ### Tiene: codigo, fecha_inicio, fecha_fin, monto, campo OCDE (Zoologia)
-GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:rais.unmsm.edu.pe:Projects/13172
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Projects/165
 
 ### Project ID=13915: Biomarcadores TGFbeta (con monto S/ 625,100)
 ### Tiene: codigo, fechas (2024-2027), campo OCDE (Salud Publica)
-GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:rais.unmsm.edu.pe:Projects/13915
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Projects/13915
 
 ### Project ID=13892: Microbiota intestinal (con monto S/ 788,780)
 ### Tiene: codigo, fechas (2025-2027), campo OCDE (Ciencias Veterinarias)
-GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:rais.unmsm.edu.pe:Projects/13892
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Projects/13892
+
+### -----------------------------------------------------------------------------
+### FUNDING - Ejemplos de financiamiento por proyecto
+### Campos M: id, type, identifiers(AwardNumber), title, fundedBy, lastModified
+### -----------------------------------------------------------------------------
+
+### Funding principal (referenciado al proyecto 1)
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Fundings/P165
+
+### Funding del proyecto 2
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Fundings/P2
+
+### Funding del proyecto 3
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Fundings/P3
+
+### -----------------------------------------------------------------------------
+### EQUIPMENT - Ejemplos de equipamiento cientifico
+### Campos M: id, identifiers(CRISID), type, name, owner, lastModified
+### -----------------------------------------------------------------------------
+
+### Equipment ID=1
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Equipments/1
+
+### Equipment ID=2
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Equipments/2
+
+### Equipment ID=3
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Equipments/3
 
 ### -----------------------------------------------------------------------------
 ### PATENT - Registros con mas campos completos
-### Campos M: id, patentNumber, title, type, subject | O: inventors, holders, dates
+### Campos M: id, patentNumber, title, type, subjects(CIP), lastModified
 ### -----------------------------------------------------------------------------
 
 ### Patent ID=6: Nanoparticulas de cobre
 ### Tiene: nro_registro (8112), tipo (Patente de invencion), fecha, oficina (INDECOPI), expediente, titular
-GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:rais.unmsm.edu.pe:Patents/6
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Patents/6
 
 ### Patent ID=71: Method for evaluating sensitivity (USPTO)
 ### Tiene: nro_registro (9194869), tipo, fecha, oficina (USPTO), expediente internacional
-GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:rais.unmsm.edu.pe:Patents/71
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Patents/71
 
 ### Patent ID=92: Light Concentration Device (China)
 ### Tiene: nro_registro (CN_105247690_B), patente internacional China
-GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:rais.unmsm.edu.pe:Patents/92
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Patents/92
 
 ### =============================================================================
 ### FUNCIONALIDADES OAI-PMH ADICIONALES
@@ -162,39 +199,52 @@ GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:
 
 ### --- PAGINACION con resumptionToken ---
 ### Primera pagina (100 registros por pagina)
-GET {{baseUrl}}?verb=ListIdentifiers&metadataPrefix={{metadataPrefix}}&set=persons
+GET http://localhost:3000/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=persons
 
 ### Segunda pagina (usar token de respuesta anterior)
-# GET {{baseUrl}}?verb=ListIdentifiers&resumptionToken=TOKEN_DE_RESPUESTA_ANTERIOR
+# GET http://localhost:3000/oai?verb=ListIdentifiers&resumptionToken=TOKEN_DE_RESPUESTA_ANTERIOR
 
 ### --- INCREMENTAL HARVESTING ---
 ### Registros modificados en 2024
-GET {{baseUrl}}?verb=ListIdentifiers&metadataPrefix={{metadataPrefix}}&set=persons&from=2024-01-01&until=2024-12-31
+GET http://localhost:3000/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=persons&from=2024-01-01&until=2024-12-31
 
 ### Registros de publications del 2025
-GET {{baseUrl}}?verb=ListIdentifiers&metadataPrefix={{metadataPrefix}}&set=publications&from=2025-01-01
+GET http://localhost:3000/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=publications&from=2025-01-01
 
 ### Proyectos recientes (2024 en adelante)
-GET {{baseUrl}}?verb=ListIdentifiers&metadataPrefix={{metadataPrefix}}&set=projects&from=2024-01-01
+GET http://localhost:3000/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=projects&from=2024-01-01
+
+### Financiamientos recientes (2024 en adelante)
+GET http://localhost:3000/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=fundings&from=2024-01-01
+
+### Equipamientos recientes (2024 en adelante)
+GET http://localhost:3000/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=equipments&from=2024-01-01
+
+### --- COMPATIBILIDAD LEGACY DE SETS ---
+### Alias legacy (todavia soportados): funding -> fundings
+GET http://localhost:3000/oai?verb=ListRecords&metadataPrefix=perucris-cerif&set=funding
+
+### Alias legacy (todavia soportados): equipment -> equipments
+GET http://localhost:3000/oai?verb=ListRecords&metadataPrefix=perucris-cerif&set=equipment
 
 ### =============================================================================
 ### MANEJO DE ERRORES OAI-PMH
 ### =============================================================================
 
 ### badVerb - Verbo invalido
-GET {{baseUrl}}?verb=InvalidVerb
+GET http://localhost:3000/oai?verb=InvalidVerb
 
 ### badArgument - Falta metadataPrefix
-GET {{baseUrl}}?verb=ListRecords
+GET http://localhost:3000/oai?verb=ListRecords
 
 ### cannotDisseminateFormat - Formato no soportado
-GET {{baseUrl}}?verb=ListRecords&metadataPrefix=oai_dc&set=persons
+GET http://localhost:3000/oai?verb=ListRecords&metadataPrefix=oai_dc&set=persons
 
 ### idDoesNotExist - Identificador no existe
-GET {{baseUrl}}?verb=GetRecord&metadataPrefix={{metadataPrefix}}&identifier=oai:rais.unmsm.edu.pe:Persons/999999999
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Persons/999999999
 
 ### noRecordsMatch - Sin resultados en rango de fechas futuras
-GET {{baseUrl}}?verb=ListIdentifiers&metadataPrefix={{metadataPrefix}}&set=persons&from=2030-01-01&until=2030-12-31
+GET http://localhost:3000/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=persons&from=2030-01-01&until=2030-12-31
 
 ### =============================================================================
 ### ENDPOINTS AUXILIARES

@@ -25,10 +25,20 @@ export const SETS = [
   { setSpec: 'orgunits', setName: 'Unidades organizativas' },
   { setSpec: 'publications', setName: 'Publicaciones' },
   { setSpec: 'projects', setName: 'Proyectos' },
+  { setSpec: 'fundings', setName: 'Financiamientos' },
+  { setSpec: 'equipments', setName: 'Equipamientos' },
   { setSpec: 'patents', setName: 'Patentes' },
 ];
 
-export const VALID_SETS = SETS.map(s => s.setSpec);
+export const LEGACY_SET_ALIASES = {
+  funding: 'fundings',
+  equipment: 'equipments',
+};
+
+export const VALID_SETS = [
+  ...SETS.map(s => s.setSpec),
+  ...Object.keys(LEGACY_SET_ALIASES),
+];
 
 // Verbos OAI-PMH soportados
 export const OAI_VERBS = [
@@ -57,6 +67,14 @@ export const IDENTIFIER_SCHEMES = {
 
   // Project
   PROJECT_REFERENCE: 'https://w3id.org/cerif/vocab/IdentifierTypes#ProjectReference',
+
+  // Funding
+  AWARD_NUMBER: 'https://w3id.org/cerif/vocab/IdentifierTypes#AwardNumber',
+  FUNDREF_ID: 'https://w3id.org/cerif/vocab/IdentifierTypes#FundRefID',
+
+  // Equipment
+  CRIS_ID: 'https://w3id.org/cerif/vocab/IdentifierTypes#CRISID',
+  SERIAL_NUMBER: 'https://w3id.org/cerif/vocab/IdentifierTypes#SerialNumber',
 
   // Publication
   DOI: 'https://doi.org',
@@ -100,6 +118,9 @@ export const VOCABULARIES = {
 
   // Patente COAR
   COAR_PATENT: 'http://purl.org/coar/resource_type/9DKX-KSAF',
+
+  // Funding types
+  OPENAIRE_FUNDING_TYPES: 'https://www.openaire.eu/cerif-profile/vocab/OpenAIRE_Funding_Types',
 };
 
 // Mapeo de tipos de publicacion a URIs COAR
@@ -116,8 +137,8 @@ export const PUBLICATION_TYPE_MAP = {
 
 // Mapeo de genero
 export const GENDER_MAP = {
-  'M': 'https://w3id.org/cerif/vocab/Genders#Male',
-  'F': 'https://w3id.org/cerif/vocab/Genders#Female',
+  M: 'm',
+  F: 'f',
 };
 
 // Mapeo de tipos de patente
@@ -225,6 +246,23 @@ export const PROJECT_STATUS = {
   1: 'http://purl.org/cerif/vocab/ProjectStatus#Ongoing',
   2: 'http://purl.org/cerif/vocab/ProjectStatus#Completed',
   0: 'http://purl.org/cerif/vocab/ProjectStatus#Cancelled',
+};
+
+export const PROJECT_TYPE_OCDE_MAP = {
+  PCONFIGI: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionAplicada',
+  'PCONFIGI-INV': 'https://purl.org/pe-repo/ocde/tipoProyecto#innovacionTecnologica',
+  PSINFINV: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionBasica',
+  PSINFIPU: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionAplicada',
+  PICV: 'https://purl.org/pe-repo/ocde/tipoProyecto#innovacionTecnologica',
+  PMULTI: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionAplicada',
+  PINVPOS: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionAplicada',
+  PFEX: 'https://purl.org/pe-repo/ocde/tipoProyecto#desarrolloExperimental',
+  ECI: 'https://purl.org/pe-repo/ocde/tipoProyecto#innovacionTecnologica',
+  'PRO-CTIE': 'https://purl.org/pe-repo/ocde/tipoProyecto#innovacionTecnologica',
+  PTPGRADO: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionAplicada',
+  PTPMAEST: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionAplicada',
+  PTPDOCTO: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionAplicada',
+  PTPBACHILLER: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionAplicada',
 };
 
 // Codigos de error OAI-PMH

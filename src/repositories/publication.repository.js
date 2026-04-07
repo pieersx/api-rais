@@ -17,33 +17,38 @@ import {
 } from '../utils/constants.js';
 
 const ENTITY_TYPE = 'Publications';
+const FALLBACK_DATE = '2014-01-01T00:00:00Z';
 
-/**
- * Mapea una publicacion a formato CERIF Publication
- * @param {object} row
- * @param {Array} authors
- * @param {Array} keywords
- * @returns {object}
- */
-function mapToCerif(row, authors = [], keywords = []) {
+function normalizeOrcid(orcid) {
+  if (!orcid) return null;
+  const value = String(orcid).trim();
+  if (!value) return null;
+  return value.startsWith('http') ? value : `https://orcid.org/${value}`;
+}
+
+function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCodes = [] } = {}) {
   const typeUri = PUBLICATION_TYPE_MAP[row.tipo_publicacion] || PUBLICATION_TYPE_MAP.default;
+  const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
+  const titleValue = row.titulo || row.publicacion_nombre || `Publicación ${row.id}`;
 
   const publication = {
+    id: toCerifId(ENTITY_TYPE, row.id),
     '@id': toCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    Type: {
-      '@xmlns': VOCABULARIES.COAR_PUBLICATION_TYPES,
-      '#text': typeUri,
+    type: {
+      scheme: VOCABULARIES.COAR_PUBLICATION_TYPES,
+      value: typeUri,
     },
-    title: filterEmpty([createTitle(row.titulo)]),
+    title: filterEmpty([createTitle(titleValue, 'es')]),
+    access: inferAccessRights(row).uri,
+    lastModified,
   };
 
-  // Identificadores
   const identifiers = filterEmpty([
     createTypedIdentifier('DOI', row.doi),
     createTypedIdentifier('ISBN', row.isbn),
     createTypedIdentifier('ISSN', row.issn),
-    createTypedIdentifier('ISSN-E', row.issn_e),
+    createTypedIdentifier('ISSN', row.issn_e),
     createTypedIdentifier('Handle', row.uri),
     createTypedIdentifier('URL', row.url),
   ]);
@@ -52,115 +57,210 @@ function mapToCerif(row, authors = [], keywords = []) {
     publication.identifiers = identifiers;
   }
 
-  // Autores
   if (authors.length > 0) {
-    publication.authors = authors.map((a, idx) => {
-      const author = {
-        order: a.orden || idx + 1,
+    publication.authors = authors.map((author, index) => {
+      const fullName = author.autor || [author.nombres, author.apellido1, author.apellido2]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+
+      const person = {
+        personName: {
+          fullName,
+          familyNames: [author.apellido1, author.apellido2].filter(Boolean).join(' ').trim(),
+          firstNames: author.nombres || '',
+        },
       };
 
-      if (a.investigador_id) {
-        author.person = {
-          id: toCerifId('Persons', a.investigador_id),
-          personName: {
-            fullName: a.autor || `${a.nombres || ''} ${a.apellido1 || ''} ${a.apellido2 || ''}`.trim(),
-            familyNames: `${a.apellido1 || ''} ${a.apellido2 || ''}`.trim(),
-            firstNames: a.nombres || '',
-          },
-        };
-
-        const personIdentifiers = [];
-        if (a.doc_numero) {
-          personIdentifiers.push({ scheme: 'http://purl.org/pe-repo/concytec/terminos#dni', value: a.doc_numero });
-        }
-        if (a.codigo_orcid) {
-          personIdentifiers.push({ scheme: 'https://orcid.org', value: `https://orcid.org/${a.codigo_orcid}` });
-        }
-        if (personIdentifiers.length > 0) {
-          author.person.identifiers = personIdentifiers;
-        }
-      } else {
-        // Autor externo
-        author.person = {
-          personName: {
-            fullName: a.autor || `${a.nombres || ''} ${a.apellido1 || ''} ${a.apellido2 || ''}`.trim(),
-          },
-        };
+      if (author.investigador_id) {
+        person.id = toCerifId('Persons', author.investigador_id);
       }
 
-      return author;
+      const personIdentifiers = [];
+      if (author.doc_numero) {
+        personIdentifiers.push({
+          scheme: 'http://purl.org/pe-repo/concytec/terminos#dni',
+          value: String(author.doc_numero),
+        });
+      }
+
+      if (author.codigo_orcid) {
+        personIdentifiers.push({
+          scheme: 'https://orcid.org',
+          value: normalizeOrcid(author.codigo_orcid),
+        });
+      }
+
+      if (personIdentifiers.length > 0) {
+        person.identifiers = personIdentifiers;
+      }
+
+      const authorEntry = {
+        person,
+        order: Number(author.orden || index + 1),
+      };
+
+      if (author.facultad_id && author.facultad_nombre) {
+        authorEntry.affiliations = [
+          {
+            orgUnit: {
+              id: toCerifId('OrgUnits', `F${author.facultad_id}`),
+              name: author.facultad_nombre,
+            },
+          },
+        ];
+      }
+
+      return authorEntry;
     });
   }
 
-  // Fecha de publicacion
+  if (row.publicacion_nombre) {
+    publication.publishedIn = {
+      publication: {
+        id: toCerifId('Publications', `SRC-${row.id}`),
+        title: [{ value: row.publicacion_nombre }],
+      },
+    };
+  }
+
+  if (row.editorial) {
+    publication.publishers = [
+      {
+        orgUnit: {
+          name: [{ value: row.editorial }],
+        },
+      },
+    ];
+  }
+
   if (row.fecha_publicacion) {
     publication.publicationDate = row.fecha_publicacion instanceof Date
       ? row.fecha_publicacion.toISOString().split('T')[0]
       : row.fecha_publicacion;
   }
 
-  // Nombre de publicacion/revista
-  if (row.publicacion_nombre) {
-    publication.publishedIn = { name: row.publicacion_nombre };
-  }
+  if (row.volumen) publication.volume = String(row.volumen);
+  if (row.edicion) publication.edition = String(row.edicion);
+  if (row.pagina_inicial) publication.startPage = String(row.pagina_inicial);
+  if (row.pagina_final) publication.endPage = String(row.pagina_final);
 
-  // Editorial
-  if (row.editorial) {
-    publication.publishers = [{ name: row.editorial }];
-  }
-
-  // Volumen, edicion, paginas
-  if (row.volumen) publication.volume = row.volumen;
-  if (row.edicion) publication.edition = row.edicion;
-  if (row.pagina_inicial) publication.startPage = row.pagina_inicial;
-  if (row.pagina_final) publication.endPage = row.pagina_final;
-
-  // Idioma
   if (row.idioma) {
-    publication.language = [row.idioma];
+    publication.language = [String(row.idioma).toLowerCase()];
   }
 
-  // Resumen
   if (row.resumen) {
-    const resumenText = row.resumen instanceof Buffer
-      ? row.resumen.toString('utf-8')
-      : row.resumen;
-    if (resumenText && resumenText.trim()) {
-      publication.abstract = [{ value: resumenText.trim() }];
+    const text = row.resumen instanceof Buffer ? row.resumen.toString('utf-8') : String(row.resumen);
+    if (text.trim()) {
+      publication.abstract = [{ lang: 'es', value: text.trim() }];
     }
   }
 
-  // Pais
-  if (row.pais_codigo) {
-    publication.countryCode = row.pais_codigo;
+  if (keywords.length > 0) {
+    publication.keywords = keywords
+      .map(keyword => String(keyword.palabra_clave || '').trim())
+      .filter(Boolean)
+      .map(value => ({ lang: 'es', value }));
   }
 
-  // Access Rights (Campo M - Obligatorio)
-  const access = inferAccessRights(row);
-  publication.access = {
-    '@xmlns': VOCABULARIES.COAR_ACCESS_RIGHTS,
-    '#text': access.uri,
-  };
+  if (ocdeCodes.length > 0) {
+    publication.subjects = ocdeCodes
+      .filter(Boolean)
+      .map(code => ({
+        scheme: VOCABULARIES.OCDE_FORD,
+        value: `${VOCABULARIES.OCDE_FORD}#${code}`,
+      }));
+  }
 
-  // Keywords (Recomendado)
-  if (keywords.length > 0) {
-    publication.keywords = keywords.map(kw => ({
-      value: kw.palabra_clave,
-    }));
+  if (projectIds.length > 0) {
+    publication.originatesFrom = [];
+
+    for (const projectId of projectIds) {
+      publication.originatesFrom.push({
+        project: {
+          id: toCerifId('Projects', projectId),
+        },
+      });
+
+      publication.originatesFrom.push({
+        funding: {
+          id: toCerifId('Fundings', `P${projectId}`),
+        },
+      });
+    }
   }
 
   return publication;
 }
 
+async function getPublicationContext(publicationId) {
+  const [authors] = await pool.query(
+    `
+      SELECT
+        pa.*,
+        ui.codigo_orcid,
+        ui.doc_numero,
+        f.id as facultad_id,
+        f.nombre as facultad_nombre
+      FROM Publicacion_autor pa
+      LEFT JOIN Usuario_investigador ui ON pa.investigador_id = ui.id
+      LEFT JOIN Facultad f ON ui.facultad_id = f.id
+      WHERE pa.publicacion_id = ?
+      ORDER BY pa.orden ASC, pa.id ASC
+    `,
+    [publicationId]
+  );
+
+  const [keywords] = await pool.query(
+    `
+      SELECT clave as palabra_clave
+      FROM Publicacion_palabra_clave
+      WHERE publicacion_id = ?
+    `,
+    [publicationId]
+  );
+
+  const [originRows] = await pool.query(
+    `
+      SELECT DISTINCT
+        pp.proyecto_id,
+        o.codigo as ocde_codigo
+      FROM Publicacion_proyecto pp
+      LEFT JOIN Proyecto p ON pp.proyecto_id = p.id
+      LEFT JOIN Ocde o ON p.ocde_id = o.id
+      WHERE pp.publicacion_id = ?
+        AND pp.proyecto_id IS NOT NULL
+        AND IFNULL(pp.estado, 1) = 1
+    `,
+    [publicationId]
+  );
+
+  const projectIds = [...new Set(originRows.map(row => row.proyecto_id).filter(Boolean))];
+  const ocdeCodes = [...new Set(originRows.map(row => row.ocde_codigo).filter(Boolean))];
+
+  return {
+    authors,
+    keywords,
+    projectIds,
+    ocdeCodes,
+  };
+}
+
 /**
- * Obtiene el conteo total de publicaciones activas
+ * Obtiene el conteo total de publicaciones publicables
  * @param {string} from
  * @param {string} until
  * @returns {Promise<number>}
  */
 export async function countPublications(from, until) {
-  const dateFilter = buildDateFilter(from, until);
-  let query = 'SELECT COUNT(*) as total FROM Publicacion WHERE estado = 1';
+  const dateFilter = buildDateFilter(from, until, 'p.updated_at');
+
+  let query = `
+    SELECT COUNT(*) as total
+    FROM Publicacion p
+    WHERE p.estado = 1
+      AND p.validado = 1
+  `;
 
   if (dateFilter.clause) {
     query += ` AND ${dateFilter.clause}`;
@@ -176,47 +276,35 @@ export async function countPublications(from, until) {
  * @returns {Promise<Array>}
  */
 export async function getPublications({ from, until, offset = 0, limit = env.PAGE_SIZE }) {
-  const dateFilter = buildDateFilter(from, until);
+  const dateFilter = buildDateFilter(from, until, 'p.updated_at');
 
   let query = `
-    SELECT * FROM Publicacion 
-    WHERE estado = 1
+    SELECT p.*
+    FROM Publicacion p
+    WHERE p.estado = 1
+      AND p.validado = 1
   `;
 
   if (dateFilter.clause) {
     query += ` AND ${dateFilter.clause}`;
   }
 
-  query += ` ORDER BY id LIMIT ? OFFSET ?`;
+  query += ' ORDER BY p.id LIMIT ? OFFSET ?';
 
-  const [publications] = await pool.query(query, [...dateFilter.params, limit, offset]);
+  const [rows] = await pool.query(query, [...dateFilter.params, limit, offset]);
 
-  // Obtener autores para cada publicacion
   const results = [];
-  for (const pub of publications) {
-    const [authors] = await pool.query(`
-      SELECT pa.*, ui.codigo_orcid
-      FROM Publicacion_autor pa
-      LEFT JOIN Usuario_investigador ui ON pa.investigador_id = ui.id
-      WHERE pa.publicacion_id = ?
-      ORDER BY pa.orden ASC
-    `, [pub.id]);
-
-    // Obtener keywords
-    const [keywords] = await pool.query(`
-      SELECT clave as palabra_clave
-      FROM Publicacion_palabra_clave
-      WHERE publicacion_id = ?
-    `, [pub.id]);
+  for (const row of rows) {
+    const context = await getPublicationContext(row.id);
 
     results.push({
       header: {
-        identifier: toOAIIdentifier(ENTITY_TYPE, pub.id),
-        datestamp: toISO8601(pub.updated_at),
+        identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
+        datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
         setSpec: 'publications',
       },
       metadata: {
-        Publication: mapToCerif(pub, authors, keywords),
+        Publication: mapToCerif(row, context),
       },
     });
   }
@@ -230,25 +318,26 @@ export async function getPublications({ from, until, offset = 0, limit = env.PAG
  * @returns {Promise<Array>}
  */
 export async function getPublicationHeaders({ from, until, offset = 0, limit = env.PAGE_SIZE }) {
-  const dateFilter = buildDateFilter(from, until);
+  const dateFilter = buildDateFilter(from, until, 'p.updated_at');
 
   let query = `
-    SELECT id, updated_at
-    FROM Publicacion
-    WHERE estado = 1
+    SELECT p.id, p.updated_at
+    FROM Publicacion p
+    WHERE p.estado = 1
+      AND p.validado = 1
   `;
 
   if (dateFilter.clause) {
     query += ` AND ${dateFilter.clause}`;
   }
 
-  query += ` ORDER BY id LIMIT ? OFFSET ?`;
+  query += ' ORDER BY p.id LIMIT ? OFFSET ?';
 
   const [rows] = await pool.query(query, [...dateFilter.params, limit, offset]);
 
   return rows.map(row => ({
     identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
-    datestamp: toISO8601(row.updated_at),
+    datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
     setSpec: 'publications',
   }));
 }
@@ -260,7 +349,13 @@ export async function getPublicationHeaders({ from, until, offset = 0, limit = e
  */
 export async function getPublicationById(id) {
   const [rows] = await pool.query(
-    'SELECT * FROM Publicacion WHERE id = ? AND estado = 1',
+    `
+      SELECT p.*
+      FROM Publicacion p
+      WHERE p.id = ?
+        AND p.estado = 1
+        AND p.validado = 1
+    `,
     [id]
   );
 
@@ -268,32 +363,17 @@ export async function getPublicationById(id) {
     return null;
   }
 
-  const pub = rows[0];
-
-  // Obtener autores
-  const [authors] = await pool.query(`
-    SELECT pa.*, ui.codigo_orcid
-    FROM Publicacion_autor pa
-    LEFT JOIN Usuario_investigador ui ON pa.investigador_id = ui.id
-    WHERE pa.publicacion_id = ?
-    ORDER BY pa.orden ASC
-  `, [id]);
-
-  // Obtener keywords
-  const [keywords] = await pool.query(`
-    SELECT clave as palabra_clave
-    FROM Publicacion_palabra_clave
-    WHERE publicacion_id = ?
-  `, [id]);
+  const row = rows[0];
+  const context = await getPublicationContext(row.id);
 
   return {
     header: {
-      identifier: toOAIIdentifier(ENTITY_TYPE, pub.id),
-      datestamp: toISO8601(pub.updated_at),
+      identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
+      datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
       setSpec: 'publications',
     },
     metadata: {
-      Publication: mapToCerif(pub, authors, keywords),
+      Publication: mapToCerif(row, context),
     },
   };
 }

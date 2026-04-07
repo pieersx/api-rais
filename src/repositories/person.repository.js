@@ -17,6 +17,40 @@ import {
 } from '../utils/constants.js';
 
 const ENTITY_TYPE = 'Persons';
+const FALLBACK_DATE = '2014-01-01T00:00:00Z';
+
+function normalizeOrcid(orcid) {
+  if (!orcid) return null;
+  const value = String(orcid).trim();
+  if (!value) return null;
+  return value.startsWith('http') ? value : `https://orcid.org/${value}`;
+}
+
+function normalizeContact(value) {
+  if (!value) return null;
+
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith('mailto:') || trimmed.startsWith('tel:') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith('http://')) {
+    return trimmed.replace('http://', 'https://');
+  }
+
+  if (/^\+?[0-9\s\-()]{6,}$/.test(trimmed)) {
+    const compact = trimmed.replace(/\s+/g, '');
+    return `tel:${compact}`;
+  }
+
+  if (trimmed.includes('@')) {
+    return `mailto:${trimmed.toLowerCase()}`;
+  }
+
+  return `https://${trimmed}`;
+}
 
 /**
  * Mapea una fila de BD a formato CERIF Person
@@ -25,12 +59,14 @@ const ENTITY_TYPE = 'Persons';
  * @returns {object}
  */
 function mapToCerif(row, affiliation = null) {
+  const fullName = formatFullName(row.nombres, row.apellido1, row.apellido2) || `Investigador ${row.id}`;
+
   const identifiers = filterEmpty([
-    row.doc_tipo === 'DNI' || row.doc_numero
+    row.doc_tipo === 'DNI' && /^\d{8}$/.test(String(row.doc_numero || '').trim())
       ? createIdentifier(IDENTIFIER_SCHEMES.DNI, row.doc_numero)
       : null,
     row.codigo_orcid
-      ? createIdentifier(IDENTIFIER_SCHEMES.ORCID, `https://orcid.org/${row.codigo_orcid}`)
+      ? createIdentifier(IDENTIFIER_SCHEMES.ORCID, normalizeOrcid(row.codigo_orcid))
       : null,
     row.scopus_id && row.scopus_id !== '0'
       ? createIdentifier(IDENTIFIER_SCHEMES.SCOPUS_AUTHOR_ID, row.scopus_id)
@@ -40,7 +76,7 @@ function mapToCerif(row, affiliation = null) {
       : null,
   ]);
 
-  const emails = filterEmpty([row.email1, row.email2, row.email3]);
+  const emails = filterEmpty([row.email1, row.email2, row.email3].map(normalizeContact));
 
   const affiliations = [];
   if (affiliation) {
@@ -49,18 +85,30 @@ function mapToCerif(row, affiliation = null) {
         id: toCerifId('OrgUnits', `F${affiliation.id}`),
         name: affiliation.nombre,
       },
-      role: row.tipo || 'Investigador',
+      role: 'Investigador',
     });
+
+    if (affiliation.instituto_id && affiliation.instituto_nombre) {
+      affiliations.push({
+        orgUnit: {
+          id: toCerifId('OrgUnits', `I${affiliation.instituto_id}`),
+          name: affiliation.instituto_nombre,
+        },
+        role: 'Investigador',
+      });
+    }
   }
 
   const person = {
+    id: toCerifId(ENTITY_TYPE, row.id),
     '@id': toCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     personName: {
       familyNames: formatFamilyNames(row.apellido1, row.apellido2),
-      firstNames: row.nombres || '',
-      fullName: formatFullName(row.nombres, row.apellido1, row.apellido2),
+      firstNames: row.nombres || fullName,
+      fullName,
     },
+    lastModified: toISO8601(row.updated_at) || FALLBACK_DATE,
   };
 
   // Solo agregar campos con valores
@@ -81,7 +129,11 @@ function mapToCerif(row, affiliation = null) {
   }
 
   if (row.palabras_clave) {
-    person.keywords = [{ value: row.palabras_clave }];
+    person.keywords = row.palabras_clave
+      .split(',')
+      .map(keyword => keyword.trim())
+      .filter(Boolean)
+      .map(value => ({ value }));
   }
 
   return person;
@@ -94,8 +146,8 @@ function mapToCerif(row, affiliation = null) {
  * @returns {Promise<number>}
  */
 export async function countPersons(from, until) {
-  const dateFilter = buildDateFilter(from, until);
-  let query = 'SELECT COUNT(*) as total FROM Usuario_investigador WHERE estado = 1';
+  const dateFilter = buildDateFilter(from, until, 'ui.updated_at');
+  let query = 'SELECT COUNT(*) as total FROM Usuario_investigador ui WHERE ui.estado = 1';
 
   if (dateFilter.clause) {
     query += ` AND ${dateFilter.clause}`;
@@ -111,15 +163,18 @@ export async function countPersons(from, until) {
  * @returns {Promise<Array>}
  */
 export async function getPersons({ from, until, offset = 0, limit = env.PAGE_SIZE }) {
-  const dateFilter = buildDateFilter(from, until);
+  const dateFilter = buildDateFilter(from, until, 'ui.updated_at');
 
   let query = `
     SELECT 
       ui.*,
       f.id as facultad_id,
-      f.nombre as facultad_nombre
+      f.nombre as facultad_nombre,
+      i.id as instituto_id,
+      i.instituto as instituto_nombre
     FROM Usuario_investigador ui
     LEFT JOIN Facultad f ON ui.facultad_id = f.id
+    LEFT JOIN Instituto i ON ui.instituto_id = i.id
     WHERE ui.estado = 1
   `;
 
@@ -135,11 +190,21 @@ export async function getPersons({ from, until, offset = 0, limit = env.PAGE_SIZ
   return rows.map(row => ({
     header: {
       identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
-      datestamp: toISO8601(row.updated_at),
+      datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
       setSpec: 'persons',
     },
     metadata: {
-      Person: mapToCerif(row, row.facultad_id ? { id: row.facultad_id, nombre: row.facultad_nombre } : null),
+      Person: mapToCerif(
+        row,
+        row.facultad_id
+          ? {
+              id: row.facultad_id,
+              nombre: row.facultad_nombre,
+              instituto_id: row.instituto_id,
+              instituto_nombre: row.instituto_nombre,
+            }
+          : null
+      ),
     },
   }));
 }
@@ -150,12 +215,12 @@ export async function getPersons({ from, until, offset = 0, limit = env.PAGE_SIZ
  * @returns {Promise<Array>}
  */
 export async function getPersonHeaders({ from, until, offset = 0, limit = env.PAGE_SIZE }) {
-  const dateFilter = buildDateFilter(from, until);
+  const dateFilter = buildDateFilter(from, until, 'ui.updated_at');
 
   let query = `
-    SELECT id, updated_at
-    FROM Usuario_investigador
-    WHERE estado = 1
+    SELECT ui.id, ui.updated_at
+    FROM Usuario_investigador ui
+    WHERE ui.estado = 1
   `;
 
   if (dateFilter.clause) {
@@ -169,7 +234,7 @@ export async function getPersonHeaders({ from, until, offset = 0, limit = env.PA
 
   return rows.map(row => ({
     identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
-    datestamp: toISO8601(row.updated_at),
+    datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
     setSpec: 'persons',
   }));
 }
@@ -184,9 +249,12 @@ export async function getPersonById(id) {
     SELECT 
       ui.*,
       f.id as facultad_id,
-      f.nombre as facultad_nombre
+      f.nombre as facultad_nombre,
+      i.id as instituto_id,
+      i.instituto as instituto_nombre
     FROM Usuario_investigador ui
     LEFT JOIN Facultad f ON ui.facultad_id = f.id
+    LEFT JOIN Instituto i ON ui.instituto_id = i.id
     WHERE ui.id = ? AND ui.estado = 1
   `;
 
@@ -200,11 +268,21 @@ export async function getPersonById(id) {
   return {
     header: {
       identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
-      datestamp: toISO8601(row.updated_at),
+      datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
       setSpec: 'persons',
     },
     metadata: {
-      Person: mapToCerif(row, row.facultad_id ? { id: row.facultad_id, nombre: row.facultad_nombre } : null),
+      Person: mapToCerif(
+        row,
+        row.facultad_id
+          ? {
+              id: row.facultad_id,
+              nombre: row.facultad_nombre,
+              instituto_id: row.instituto_id,
+              instituto_nombre: row.instituto_nombre,
+            }
+          : null
+      ),
     },
   };
 }

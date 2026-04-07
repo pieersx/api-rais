@@ -12,17 +12,27 @@ import {
 import {
   IDENTIFIER_SCHEMES,
   NAMESPACES,
+  UNMSM_IDENTIFIERS,
+  UNMSM_CODES,
 } from '../utils/constants.js';
 
 const ENTITY_TYPE = 'OrgUnits';
+const FALLBACK_DATE = '2014-01-01T00:00:00Z';
 
 // Hardcoded: UNMSM como organizacion raiz
 const UNMSM_ROOT = {
   id: 1,
   nombre: 'Universidad Nacional Mayor de San Marcos',
   acronym: 'UNMSM',
-  ruc: '20148092282',
+  ruc: UNMSM_IDENTIFIERS.RUC,
+  ror: UNMSM_IDENTIFIERS.ROR,
+  isni: UNMSM_IDENTIFIERS.ISNI,
+  grid: UNMSM_IDENTIFIERS.GRID,
+  scopusAffiliationId: UNMSM_IDENTIFIERS.SCOPUS_AFFILIATION_ID,
   countryCode: 'PE',
+  ubigeo: UNMSM_CODES.UBIGEO_LIMA,
+  ciiu: UNMSM_CODES.CIIU_EDUCACION_SUPERIOR,
+  sectorOcde: UNMSM_CODES.SECTOR_OCDE,
 };
 
 /**
@@ -31,11 +41,15 @@ const UNMSM_ROOT = {
  * @returns {object}
  */
 function mapFacultadToCerif(row) {
+  const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
+
   const orgUnit = {
+    id: toCerifId(ENTITY_TYPE, `F${row.id}`),
     '@id': toCerifId(ENTITY_TYPE, `F${row.id}`),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     name: [createTitle(row.nombre)],
     type: 'Facultad',
+    lastModified,
   };
 
   // Todas las facultades dependen de UNMSM
@@ -46,6 +60,22 @@ function mapFacultadToCerif(row) {
     },
   };
 
+  // Agregar clasificaciones: UbiGeo, CIIU, Sector OCDE (heredadas de UNMSM)
+  orgUnit.classifications = filterEmpty([
+    {
+      scheme: 'https://purl.org/pe-repo/inei/ubigeo',
+      value: UNMSM_CODES.UBIGEO_LIMA,
+    },
+    {
+      scheme: 'https://purl.org/pe-repo/inei/ciiu',
+      value: UNMSM_CODES.CIIU_EDUCACION_SUPERIOR,
+    },
+    {
+      scheme: 'https://purl.org/pe-repo/ocde/sector',
+      value: UNMSM_CODES.SECTOR_OCDE,
+    },
+  ]);
+
   return orgUnit;
 }
 
@@ -55,11 +85,15 @@ function mapFacultadToCerif(row) {
  * @returns {object}
  */
 function mapInstitutoToCerif(row) {
+  const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
+
   const orgUnit = {
+    id: toCerifId(ENTITY_TYPE, `I${row.id}`),
     '@id': toCerifId(ENTITY_TYPE, `I${row.id}`),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     name: [createTitle(row.instituto)],
     type: 'Instituto',
+    lastModified,
   };
 
   // Los institutos dependen de su facultad
@@ -72,6 +106,22 @@ function mapInstitutoToCerif(row) {
     };
   }
 
+  // Agregar clasificaciones: UbiGeo, CIIU, Sector OCDE (heredadas de UNMSM)
+  orgUnit.classifications = filterEmpty([
+    {
+      scheme: 'https://purl.org/pe-repo/inei/ubigeo',
+      value: UNMSM_CODES.UBIGEO_LIMA,
+    },
+    {
+      scheme: 'https://purl.org/pe-repo/inei/ciiu',
+      value: UNMSM_CODES.CIIU_EDUCACION_SUPERIOR,
+    },
+    {
+      scheme: 'https://purl.org/pe-repo/ocde/sector',
+      value: UNMSM_CODES.SECTOR_OCDE,
+    },
+  ]);
+
   return orgUnit;
 }
 
@@ -81,11 +131,15 @@ function mapInstitutoToCerif(row) {
  * @returns {object}
  */
 function mapGrupoToCerif(row) {
+  const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
+
   const orgUnit = {
+    id: toCerifId(ENTITY_TYPE, `G${row.id}`),
     '@id': toCerifId(ENTITY_TYPE, `G${row.id}`),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     name: [createTitle(row.grupo_nombre)],
     type: 'Grupo de investigacion',
+    lastModified,
   };
 
   if (row.grupo_nombre_corto) {
@@ -102,12 +156,15 @@ function mapGrupoToCerif(row) {
     };
   }
 
-  if (row.email) {
-    orgUnit.electronicAddress = [{ type: 'email', value: row.email }];
-  }
-
+  const websites = [];
   if (row.web) {
-    orgUnit.websites = [{ type: 'homepage', url: row.web }];
+    websites.push({ type: 'homepage', url: row.web });
+  }
+  if (row.email) {
+    websites.push({ type: 'email', url: `mailto:${String(row.email).trim().toLowerCase()}` });
+  }
+  if (websites.length > 0) {
+    orgUnit.websites = websites;
   }
 
   if (row.direccion) {
@@ -115,14 +172,38 @@ function mapGrupoToCerif(row) {
   }
 
   if (row.presentacion) {
-    orgUnit.description = [{ value: row.presentacion }];
+    orgUnit.description = [{ lang: 'es', value: row.presentacion }];
   }
 
+  // Clasificaciones del grupo
+  const classifications = [];
+
+  // UbiGeo, CIIU, Sector OCDE (heredadas de UNMSM)
+  classifications.push(
+    {
+      scheme: 'https://purl.org/pe-repo/inei/ubigeo',
+      value: UNMSM_CODES.UBIGEO_LIMA,
+    },
+    {
+      scheme: 'https://purl.org/pe-repo/inei/ciiu',
+      value: UNMSM_CODES.CIIU_EDUCACION_SUPERIOR,
+    },
+    {
+      scheme: 'https://purl.org/pe-repo/ocde/sector',
+      value: UNMSM_CODES.SECTOR_OCDE,
+    }
+  );
+
+  // Categoría del grupo (si existe)
   if (row.grupo_categoria) {
-    orgUnit.classifications = [{
+    classifications.push({
       scheme: IDENTIFIER_SCHEMES.ORG_TYPE,
       value: row.grupo_categoria,
-    }];
+    });
+  }
+
+  if (classifications.length > 0) {
+    orgUnit.classifications = filterEmpty(classifications);
   }
 
   return orgUnit;
@@ -168,20 +249,40 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
     results.push({
       header: {
         identifier: toOAIIdentifier(ENTITY_TYPE, UNMSM_ROOT.id),
-        datestamp: toISO8601(new Date()),
+        datestamp: FALLBACK_DATE,
         setSpec: 'orgunits',
       },
       metadata: {
         OrgUnit: {
+          id: toCerifId(ENTITY_TYPE, UNMSM_ROOT.id),
           '@id': toCerifId(ENTITY_TYPE, UNMSM_ROOT.id),
           '@xmlns': NAMESPACES.PERUCRIS_CERIF,
           name: [createTitle(UNMSM_ROOT.nombre)],
           acronym: UNMSM_ROOT.acronym,
           type: 'Universidad',
-          identifiers: [
+          lastModified: FALLBACK_DATE,
+          identifiers: filterEmpty([
             createIdentifier(IDENTIFIER_SCHEMES.RUC, UNMSM_ROOT.ruc),
-          ],
+            createIdentifier(IDENTIFIER_SCHEMES.ROR, UNMSM_ROOT.ror),
+            createIdentifier(IDENTIFIER_SCHEMES.ISNI, UNMSM_ROOT.isni),
+            createIdentifier(IDENTIFIER_SCHEMES.GRID, UNMSM_ROOT.grid),
+            createIdentifier('http://purl.org/pe-repo/concytec/scopus/affiliationId', UNMSM_ROOT.scopusAffiliationId),
+          ]),
           countryCode: UNMSM_ROOT.countryCode,
+          classifications: filterEmpty([
+            {
+              scheme: 'https://purl.org/pe-repo/inei/ubigeo',
+              value: UNMSM_ROOT.ubigeo,
+            },
+            {
+              scheme: 'https://purl.org/pe-repo/inei/ciiu',
+              value: UNMSM_ROOT.ciiu,
+            },
+            {
+              scheme: 'https://purl.org/pe-repo/ocde/sector',
+              value: UNMSM_ROOT.sectorOcde,
+            },
+          ]),
         },
       },
     });
@@ -202,7 +303,7 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
       results.push({
         header: {
           identifier: toOAIIdentifier(ENTITY_TYPE, `F${f.id}`),
-          datestamp: toISO8601(new Date()),
+          datestamp: FALLBACK_DATE,
           setSpec: 'orgunits',
         },
         metadata: {
@@ -229,7 +330,7 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
       results.push({
         header: {
           identifier: toOAIIdentifier(ENTITY_TYPE, `I${inst.id}`),
-          datestamp: toISO8601(new Date()),
+          datestamp: FALLBACK_DATE,
           setSpec: 'orgunits',
         },
         metadata: {
@@ -261,7 +362,7 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
       results.push({
         header: {
           identifier: toOAIIdentifier(ENTITY_TYPE, `G${g.id}`),
-          datestamp: toISO8601(g.updated_at),
+          datestamp: toISO8601(g.updated_at) || FALLBACK_DATE,
           setSpec: 'orgunits',
         },
         metadata: {
@@ -296,20 +397,40 @@ export async function getOrgUnitById(id) {
     return {
       header: {
         identifier: toOAIIdentifier(ENTITY_TYPE, UNMSM_ROOT.id),
-        datestamp: toISO8601(new Date()),
+        datestamp: FALLBACK_DATE,
         setSpec: 'orgunits',
       },
       metadata: {
         OrgUnit: {
+          id: toCerifId(ENTITY_TYPE, UNMSM_ROOT.id),
           '@id': toCerifId(ENTITY_TYPE, UNMSM_ROOT.id),
           '@xmlns': NAMESPACES.PERUCRIS_CERIF,
           name: [createTitle(UNMSM_ROOT.nombre)],
           acronym: UNMSM_ROOT.acronym,
           type: 'Universidad',
-          identifiers: [
+          lastModified: FALLBACK_DATE,
+          identifiers: filterEmpty([
             createIdentifier(IDENTIFIER_SCHEMES.RUC, UNMSM_ROOT.ruc),
-          ],
+            createIdentifier(IDENTIFIER_SCHEMES.ROR, UNMSM_ROOT.ror),
+            createIdentifier(IDENTIFIER_SCHEMES.ISNI, UNMSM_ROOT.isni),
+            createIdentifier(IDENTIFIER_SCHEMES.GRID, UNMSM_ROOT.grid),
+            createIdentifier('http://purl.org/pe-repo/concytec/scopus/affiliationId', UNMSM_ROOT.scopusAffiliationId),
+          ]),
           countryCode: UNMSM_ROOT.countryCode,
+          classifications: filterEmpty([
+            {
+              scheme: 'https://purl.org/pe-repo/inei/ubigeo',
+              value: UNMSM_ROOT.ubigeo,
+            },
+            {
+              scheme: 'https://purl.org/pe-repo/inei/ciiu',
+              value: UNMSM_ROOT.ciiu,
+            },
+            {
+              scheme: 'https://purl.org/pe-repo/ocde/sector',
+              value: UNMSM_ROOT.sectorOcde,
+            },
+          ]),
         },
       },
     };
@@ -326,7 +447,7 @@ export async function getOrgUnitById(id) {
     return {
       header: {
         identifier: toOAIIdentifier(ENTITY_TYPE, id),
-        datestamp: toISO8601(new Date()),
+        datestamp: FALLBACK_DATE,
         setSpec: 'orgunits',
       },
       metadata: {
@@ -348,7 +469,7 @@ export async function getOrgUnitById(id) {
     return {
       header: {
         identifier: toOAIIdentifier(ENTITY_TYPE, id),
-        datestamp: toISO8601(new Date()),
+        datestamp: FALLBACK_DATE,
         setSpec: 'orgunits',
       },
       metadata: {
@@ -370,7 +491,7 @@ export async function getOrgUnitById(id) {
     return {
       header: {
         identifier: toOAIIdentifier(ENTITY_TYPE, id),
-        datestamp: toISO8601(rows[0].updated_at),
+        datestamp: toISO8601(rows[0].updated_at) || FALLBACK_DATE,
         setSpec: 'orgunits',
       },
       metadata: {

@@ -35,7 +35,7 @@ app.get('/', (req, res) => {
       health: '/health',
     },
     documentation: 'https://purl.org/pe-repo/perucris/cerif',
-    sets: ['persons', 'orgunits', 'publications', 'projects', 'patents'],
+    sets: ['persons', 'orgunits', 'publications', 'projects', 'fundings', 'equipments', 'patents'],
   })
 })
 

@@ -1,5 +1,6 @@
 import { env } from '../../config/env.js';
 import { createResumptionToken, validateResumptionToken } from './resumptionToken.js';
+import { normalizeSetSpec } from '../../utils/formatters.js';
 
 // Importar repositorios
 import * as personRepo from '../../repositories/person.repository.js';
@@ -7,6 +8,8 @@ import * as orgunitRepo from '../../repositories/orgunit.repository.js';
 import * as publicationRepo from '../../repositories/publication.repository.js';
 import * as projectRepo from '../../repositories/project.repository.js';
 import * as patentRepo from '../../repositories/patent.repository.js';
+import * as fundingRepo from '../../repositories/funding.repository.js';
+import * as equipmentRepo from '../../repositories/equipment.repository.js';
 
 // Mapeo de set a repositorio
 const repositories = {
@@ -30,6 +33,14 @@ const repositories = {
     count: patentRepo.countPatents,
     getHeaders: patentRepo.getPatentHeaders,
   },
+  fundings: {
+    count: fundingRepo.countFunding,
+    getHeaders: fundingRepo.getFundingHeaders,
+  },
+  equipments: {
+    count: equipmentRepo.countEquipment,
+    getHeaders: equipmentRepo.getEquipmentHeaders,
+  },
 };
 
 /**
@@ -47,8 +58,9 @@ export async function listIdentifiers(params) {
       return { error: { code: 'badResumptionToken', message: validation.error } };
     }
     ({ set, metadataPrefix, from, until, cursor, completeListSize } = validation.data);
+    set = normalizeSetSpec(set);
   } else {
-    set = params.set;
+    set = normalizeSetSpec(params.set);
     metadataPrefix = params.metadataPrefix;
     from = params.from;
     until = params.until;

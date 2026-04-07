@@ -12,39 +12,141 @@ import {
 import {
   IDENTIFIER_SCHEMES,
   PROJECT_STATUS,
+  PROJECT_TYPE_OCDE_MAP,
   VOCABULARIES,
   NAMESPACES,
 } from '../utils/constants.js';
 
 const ENTITY_TYPE = 'Projects';
+const FALLBACK_DATE = '2014-01-01T00:00:00Z';
+const OCDE_PROJECT_TYPE_SCHEME = 'https://purl.org/pe-repo/ocde/tipoProyecto';
+const CTI_PROJECT_TYPE_SCHEME = 'https://purl.org/pe-repo/concytec/terminos';
 
-/**
- * Mapea un proyecto a formato CERIF Project
- * @param {object} row
- * @param {Array} integrantes
- * @param {object} ocde - Campo OCDE
- * @returns {object}
- */
-function mapToCerif(row, integrantes = [], ocde = null) {
+function toSlug(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function getProjectTypes(row) {
+  const types = [];
+  const projectType = String(row.tipo_proyecto || '').trim();
+
+  if (!projectType) {
+    return types;
+  }
+
+  const ocdeType = PROJECT_TYPE_OCDE_MAP[projectType];
+  if (ocdeType) {
+    types.push({
+      scheme: OCDE_PROJECT_TYPE_SCHEME,
+      value: ocdeType,
+    });
+  }
+
+  const ctiSlug = toSlug(projectType);
+  if (ctiSlug) {
+    types.push({
+      scheme: CTI_PROJECT_TYPE_SCHEME,
+      value: `${CTI_PROJECT_TYPE_SCHEME}#${ctiSlug}`,
+    });
+  }
+
+  return types;
+}
+
+function hasFundingData(row) {
+  const total =
+    Number(row.aporte_unmsm || 0)
+    + Number(row.aporte_no_unmsm || 0)
+    + Number(row.financiamiento_fuente_externa || 0)
+    + Number(row.entidad_asociada || 0);
+
+  return total > 0 || (row.codigo_proyecto && String(row.codigo_proyecto).trim() !== '');
+}
+
+function buildParticipantRole(integrante) {
+  const rawRole = String(integrante.tipo_nombre || integrante.condicion || '').trim();
+  if (rawRole) return rawRole;
+  return 'Participante';
+}
+
+function buildParticipants(row, integrantes) {
+  const participants = [];
+
+  for (const integrante of integrantes) {
+    const fullName = [integrante.nombres, integrante.apellido1, integrante.apellido2]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    if (!integrante.investigador_id && !fullName) continue;
+
+    const participant = {
+      role: buildParticipantRole(integrante),
+    };
+
+    if (integrante.investigador_id) {
+      participant.person = {
+        id: toCerifId('Persons', integrante.investigador_id),
+        name: fullName || `Investigador ${integrante.investigador_id}`,
+      };
+    } else if (fullName) {
+      participant.person = {
+        name: fullName,
+      };
+    }
+
+    participants.push(participant);
+  }
+
+  if (row.facultad_id && row.facultad_nombre) {
+    participants.push({
+      orgUnit: {
+        id: toCerifId('OrgUnits', `F${row.facultad_id}`),
+        name: row.facultad_nombre,
+      },
+      role: 'Institución ejecutora',
+    });
+  }
+
+  if (row.grupo_id && row.grupo_nombre) {
+    participants.push({
+      orgUnit: {
+        id: toCerifId('OrgUnits', `G${row.grupo_id}`),
+        name: row.grupo_nombre,
+      },
+      role: 'Grupo de investigación',
+    });
+  }
+
+  return participants;
+}
+
+function mapToCerif(row, integrantes = [], ocde = null, abstract = null, outputs = null, equipments = []) {
+  const titleValue = row.titulo || row.codigo_proyecto || `Proyecto ${row.id}`;
+
   const project = {
+    id: toCerifId(ENTITY_TYPE, row.id),
     '@id': toCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    title: filterEmpty([createTitle(row.titulo, 'es')]),
+    title: filterEmpty([createTitle(titleValue, 'es')]),
+    lastModified: toISO8601(row.updated_at) || FALLBACK_DATE,
   };
 
-  // Identificador del proyecto (codigo)
   if (row.codigo_proyecto) {
-    project.identifiers = [
+    project.identifiers = filterEmpty([
       createIdentifier(IDENTIFIER_SCHEMES.PROJECT_REFERENCE, row.codigo_proyecto),
-    ];
+    ]);
   }
 
-  // Acronimo
-  if (row.tipo_proyecto) {
-    project.acronym = row.tipo_proyecto;
+  const types = getProjectTypes(row);
+  if (types.length > 0) {
+    project.type = types;
   }
 
-  // Fechas
   if (row.fecha_inicio) {
     project.startDate = row.fecha_inicio instanceof Date
       ? row.fecha_inicio.toISOString().split('T')[0]
@@ -57,111 +159,126 @@ function mapToCerif(row, integrantes = [], ocde = null) {
       : row.fecha_fin;
   }
 
-  // Estado
   if (row.estado !== undefined && PROJECT_STATUS[row.estado]) {
     project.status = PROJECT_STATUS[row.estado];
   }
 
-  // Palabras clave
   if (row.palabras_clave) {
-    project.keywords = row.palabras_clave.split(',').map(k => ({
-      lang: 'es',
-      value: k.trim(),
-    })).filter(k => k.value);
+    project.keywords = row.palabras_clave
+      .split(',')
+      .map(keyword => keyword.trim())
+      .filter(Boolean)
+      .map(value => ({ lang: 'es', value }));
   }
 
-  // Campo OCDE
-  if (ocde) {
-    project.subjects = [{
-      scheme: VOCABULARIES.OCDE_FORD,
-      value: `${VOCABULARIES.OCDE_FORD}#${ocde.codigo}`,
-      name: ocde.linea,
+  if (abstract) {
+    project.abstract = [{
+      lang: 'es',
+      value: String(abstract).trim(),
     }];
   }
 
-  // Monto asignado (como funding info)
-  if (row.monto_asignado) {
-    project.funding = {
-      amount: {
-        value: parseFloat(row.monto_asignado),
-        currency: 'PEN',
-      },
+  if (ocde?.codigo) {
+    project.subjects = [{
+      scheme: VOCABULARIES.OCDE_FORD,
+      value: `${VOCABULARIES.OCDE_FORD}#${ocde.codigo}`,
+    }];
+  }
+
+  if (row.linea_nombre) {
+    project.researchLine = [row.linea_nombre];
+  }
+
+  const participants = buildParticipants(row, integrantes);
+  if (participants.length > 0) {
+    project.participants = participants;
+  }
+
+  if (hasFundingData(row)) {
+    project.fundings = [{
+      id: toCerifId('Fundings', `P${row.id}`),
+    }];
+  }
+
+  if (outputs) {
+    project.outputs = {
+      publications: outputs.publications || [],
+      patents: outputs.patents || [],
+      products: outputs.products || [],
     };
   }
 
-  // Equipo del proyecto (integrantes)
-  if (integrantes.length > 0) {
-    const team = [];
-    const consortium = [];
-
-    for (const int of integrantes) {
-      const participant = {};
-
-      if (int.investigador_id) {
-        participant.person = {
-          id: toCerifId('Persons', int.investigador_id),
-          name: int.nombres ? `${int.nombres} ${int.apellido1 || ''} ${int.apellido2 || ''}`.trim() : null,
-        };
-      }
-
-      // Rol
-      const tipoNormalizado = (int.tipo_nombre || int.condicion || '').toLowerCase();
-      if (tipoNormalizado.includes('responsable') || tipoNormalizado.includes('principal')) {
-        participant.role = 'PrincipalInvestigator';
-        team.push(participant);
-      } else if (tipoNormalizado.includes('coordinador')) {
-        participant.role = 'Coordinator';
-        consortium.push(participant);
-      } else if (tipoNormalizado.includes('tesista')) {
-        participant.role = 'Student';
-        team.push(participant);
-      } else {
-        participant.role = 'Member';
-        team.push(participant);
-      }
-    }
-
-    if (team.length > 0) {
-      project.team = team;
-    }
-
-    if (consortium.length > 0) {
-      project.consortium = consortium;
-    }
-  }
-
-  // Grupo de investigacion
-  if (row.grupo_id && row.grupo_nombre) {
-    if (!project.consortium) project.consortium = [];
-    project.consortium.push({
-      orgUnit: {
-        id: toCerifId('OrgUnits', `G${row.grupo_id}`),
-        name: row.grupo_nombre,
-      },
-      role: 'Member',
-    });
-  }
-
-  // Facultad
-  if (row.facultad_id && row.facultad_nombre) {
-    if (!project.consortium) project.consortium = [];
-    project.consortium.push({
-      orgUnit: {
-        id: toCerifId('OrgUnits', `F${row.facultad_id}`),
-        name: row.facultad_nombre,
-      },
-      role: 'Contractor',
-    });
-  }
-
-  // Localizacion
   if (row.localizacion) {
     project.geoLocations = [{
       geoLocationPlace: row.localizacion,
     }];
   }
 
+  if (equipments.length > 0) {
+    project.uses = equipments;
+  }
+
   return project;
+}
+
+async function getProjectParticipants(projectId) {
+  const [integrantes] = await pool.query(
+    `
+      SELECT
+        pi.investigador_id,
+        pi.condicion,
+        ui.nombres,
+        ui.apellido1,
+        ui.apellido2,
+        pit.nombre as tipo_nombre
+      FROM Proyecto_integrante pi
+      LEFT JOIN Usuario_investigador ui ON pi.investigador_id = ui.id
+      LEFT JOIN Proyecto_integrante_tipo pit ON pi.proyecto_integrante_tipo_id = pit.id
+      WHERE pi.proyecto_id = ?
+        AND IFNULL(pi.estado, 1) = 1
+      ORDER BY pi.id
+    `,
+    [projectId]
+  );
+
+  return integrantes;
+}
+
+async function getProjectOutputs(projectId) {
+  const [publications] = await pool.query(
+    `
+      SELECT DISTINCT pp.publicacion_id
+      FROM Publicacion_proyecto pp
+      WHERE pp.proyecto_id = ?
+        AND pp.publicacion_id IS NOT NULL
+        AND IFNULL(pp.estado, 1) = 1
+      ORDER BY pp.publicacion_id
+    `,
+    [projectId]
+  );
+
+  return {
+    publications: publications.map(row => toCerifId('Publications', row.publicacion_id)),
+    patents: [],
+    products: [],
+  };
+}
+
+async function getProjectEquipments(groupId) {
+  if (!groupId) return [];
+
+  const [rows] = await pool.query(
+    `
+      SELECT gi.id
+      FROM Grupo_infraestructura gi
+      WHERE gi.grupo_id = ?
+      ORDER BY gi.id
+      LIMIT 100
+    `,
+    [groupId]
+  );
+
+  return rows.map(row => toCerifId('Equipments', row.id));
 }
 
 /**
@@ -171,8 +288,8 @@ function mapToCerif(row, integrantes = [], ocde = null) {
  * @returns {Promise<number>}
  */
 export async function countProjects(from, until) {
-  const dateFilter = buildDateFilter(from, until);
-  let query = 'SELECT COUNT(*) as total FROM Proyecto WHERE estado >= 1';
+  const dateFilter = buildDateFilter(from, until, 'p.updated_at');
+  let query = 'SELECT COUNT(*) as total FROM Proyecto p WHERE p.estado >= 1';
 
   if (dateFilter.clause) {
     query += ` AND ${dateFilter.clause}`;
@@ -188,19 +305,23 @@ export async function countProjects(from, until) {
  * @returns {Promise<Array>}
  */
 export async function getProjects({ from, until, offset = 0, limit = env.PAGE_SIZE }) {
-  const dateFilter = buildDateFilter(from, until);
+  const dateFilter = buildDateFilter(from, until, 'p.updated_at');
 
   let query = `
-    SELECT 
+    SELECT
       p.*,
       f.nombre as facultad_nombre,
       g.grupo_nombre,
       o.codigo as ocde_codigo,
-      o.linea as ocde_linea
+      o.linea as ocde_linea,
+      li.nombre as linea_nombre,
+      pd.detalle as proyecto_descripcion
     FROM Proyecto p
     LEFT JOIN Facultad f ON p.facultad_id = f.id
     LEFT JOIN Grupo g ON p.grupo_id = g.id
     LEFT JOIN Ocde o ON p.ocde_id = o.id
+    LEFT JOIN Linea_investigacion li ON p.linea_investigacion_id = li.id
+    LEFT JOIN Proyecto_descripcion pd ON p.id = pd.proyecto_id
     WHERE p.estado >= 1
   `;
 
@@ -208,36 +329,28 @@ export async function getProjects({ from, until, offset = 0, limit = env.PAGE_SI
     query += ` AND ${dateFilter.clause}`;
   }
 
-  query += ` ORDER BY p.id LIMIT ? OFFSET ?`;
+  query += ' ORDER BY p.id LIMIT ? OFFSET ?';
 
   const [projects] = await pool.query(query, [...dateFilter.params, limit, offset]);
 
   const results = [];
-  for (const proj of projects) {
-    // Obtener integrantes
-    const [integrantes] = await pool.query(`
-      SELECT 
-        pi.*,
-        ui.nombres,
-        ui.apellido1,
-        ui.apellido2,
-        pit.nombre as tipo_nombre
-      FROM Proyecto_integrante pi
-      LEFT JOIN Usuario_investigador ui ON pi.investigador_id = ui.id
-      LEFT JOIN Proyecto_integrante_tipo pit ON pi.proyecto_integrante_tipo_id = pit.id
-      WHERE pi.proyecto_id = ? AND pi.estado = 1
-    `, [proj.id]);
+  for (const projectRow of projects) {
+    const integrantes = await getProjectParticipants(projectRow.id);
+    const outputs = await getProjectOutputs(projectRow.id);
+    const equipments = await getProjectEquipments(projectRow.grupo_id);
 
-    const ocde = proj.ocde_codigo ? { codigo: proj.ocde_codigo, linea: proj.ocde_linea } : null;
+    const ocde = projectRow.ocde_codigo
+      ? { codigo: projectRow.ocde_codigo, linea: projectRow.ocde_linea }
+      : null;
 
     results.push({
       header: {
-        identifier: toOAIIdentifier(ENTITY_TYPE, proj.id),
-        datestamp: toISO8601(proj.updated_at),
+        identifier: toOAIIdentifier(ENTITY_TYPE, projectRow.id),
+        datestamp: toISO8601(projectRow.updated_at) || FALLBACK_DATE,
         setSpec: 'projects',
       },
       metadata: {
-        Project: mapToCerif(proj, integrantes, ocde),
+        Project: mapToCerif(projectRow, integrantes, ocde, projectRow.proyecto_descripcion, outputs, equipments),
       },
     });
   }
@@ -251,25 +364,25 @@ export async function getProjects({ from, until, offset = 0, limit = env.PAGE_SI
  * @returns {Promise<Array>}
  */
 export async function getProjectHeaders({ from, until, offset = 0, limit = env.PAGE_SIZE }) {
-  const dateFilter = buildDateFilter(from, until);
+  const dateFilter = buildDateFilter(from, until, 'p.updated_at');
 
   let query = `
-    SELECT id, updated_at
-    FROM Proyecto
-    WHERE estado >= 1
+    SELECT p.id, p.updated_at
+    FROM Proyecto p
+    WHERE p.estado >= 1
   `;
 
   if (dateFilter.clause) {
     query += ` AND ${dateFilter.clause}`;
   }
 
-  query += ` ORDER BY id LIMIT ? OFFSET ?`;
+  query += ' ORDER BY p.id LIMIT ? OFFSET ?';
 
   const [rows] = await pool.query(query, [...dateFilter.params, limit, offset]);
 
   return rows.map(row => ({
     identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
-    datestamp: toISO8601(row.updated_at),
+    datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
     setSpec: 'projects',
   }));
 }
@@ -280,50 +393,49 @@ export async function getProjectHeaders({ from, until, offset = 0, limit = env.P
  * @returns {Promise<object|null>}
  */
 export async function getProjectById(id) {
-  const [rows] = await pool.query(`
-    SELECT 
-      p.*,
-      f.nombre as facultad_nombre,
-      g.grupo_nombre,
-      o.codigo as ocde_codigo,
-      o.linea as ocde_linea
-    FROM Proyecto p
-    LEFT JOIN Facultad f ON p.facultad_id = f.id
-    LEFT JOIN Grupo g ON p.grupo_id = g.id
-    LEFT JOIN Ocde o ON p.ocde_id = o.id
-    WHERE p.id = ? AND p.estado >= 1
-  `, [id]);
+  const [rows] = await pool.query(
+    `
+      SELECT
+        p.*,
+        f.nombre as facultad_nombre,
+        g.grupo_nombre,
+        o.codigo as ocde_codigo,
+        o.linea as ocde_linea,
+        li.nombre as linea_nombre,
+        pd.detalle as proyecto_descripcion
+      FROM Proyecto p
+      LEFT JOIN Facultad f ON p.facultad_id = f.id
+      LEFT JOIN Grupo g ON p.grupo_id = g.id
+      LEFT JOIN Ocde o ON p.ocde_id = o.id
+      LEFT JOIN Linea_investigacion li ON p.linea_investigacion_id = li.id
+      LEFT JOIN Proyecto_descripcion pd ON p.id = pd.proyecto_id
+      WHERE p.id = ?
+        AND p.estado >= 1
+    `,
+    [id]
+  );
 
   if (rows.length === 0) {
     return null;
   }
 
-  const proj = rows[0];
+  const projectRow = rows[0];
+  const integrantes = await getProjectParticipants(projectRow.id);
+  const outputs = await getProjectOutputs(projectRow.id);
+  const equipments = await getProjectEquipments(projectRow.grupo_id);
 
-  // Obtener integrantes
-  const [integrantes] = await pool.query(`
-    SELECT 
-      pi.*,
-      ui.nombres,
-      ui.apellido1,
-      ui.apellido2,
-      pit.nombre as tipo_nombre
-    FROM Proyecto_integrante pi
-    LEFT JOIN Usuario_investigador ui ON pi.investigador_id = ui.id
-    LEFT JOIN Proyecto_integrante_tipo pit ON pi.proyecto_integrante_tipo_id = pit.id
-    WHERE pi.proyecto_id = ? AND pi.estado = 1
-  `, [id]);
-
-  const ocde = proj.ocde_codigo ? { codigo: proj.ocde_codigo, linea: proj.ocde_linea } : null;
+  const ocde = projectRow.ocde_codigo
+    ? { codigo: projectRow.ocde_codigo, linea: projectRow.ocde_linea }
+    : null;
 
   return {
     header: {
-      identifier: toOAIIdentifier(ENTITY_TYPE, proj.id),
-      datestamp: toISO8601(proj.updated_at),
+      identifier: toOAIIdentifier(ENTITY_TYPE, projectRow.id),
+      datestamp: toISO8601(projectRow.updated_at) || FALLBACK_DATE,
       setSpec: 'projects',
     },
     metadata: {
-      Project: mapToCerif(proj, integrantes, ocde),
+      Project: mapToCerif(projectRow, integrantes, ocde, projectRow.proyecto_descripcion, outputs, equipments),
     },
   };
 }

@@ -6,6 +6,8 @@ import * as orgunitRepo from '../../repositories/orgunit.repository.js';
 import * as publicationRepo from '../../repositories/publication.repository.js';
 import * as projectRepo from '../../repositories/project.repository.js';
 import * as patentRepo from '../../repositories/patent.repository.js';
+import * as fundingRepo from '../../repositories/funding.repository.js';
+import * as equipmentRepo from '../../repositories/equipment.repository.js';
 
 // Mapeo de entityType a repositorio
 const repositories = {
@@ -14,6 +16,12 @@ const repositories = {
   Publications: publicationRepo.getPublicationById,
   Projects: projectRepo.getProjectById,
   Patents: patentRepo.getPatentById,
+  Fundings: fundingRepo.getFundingById,
+  Equipments: equipmentRepo.getEquipmentById,
+
+  // Compatibilidad hacia atrás
+  Funding: fundingRepo.getFundingById,
+  Equipment: equipmentRepo.getEquipmentById,
 };
 
 /**
