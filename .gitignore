@@ -1,7 +1,22 @@
 node_modules/
-.env
 dist/
-*.log
-.DS_Store
+coverage/
 
-.vscode
+.env
+.env.*
+!.env.example
+
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+.DS_Store
+Thumbs.db
+
+.vscode/
+.idea/
+
+/rais/
+./informe-marzo-2026-borrador.md
+/INFORME_1er Pago Bolsa -2026.docx
+./informe-marzo-2026-borrador.md
