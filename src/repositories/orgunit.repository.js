@@ -35,6 +35,68 @@ const UNMSM_ROOT = {
   sectorOcde: UNMSM_CODES.SECTOR_OCDE,
 };
 
+function shouldIncludeStaticOrgUnits(from, until) {
+  const fallbackTime = new Date(FALLBACK_DATE).getTime();
+
+  if (from) {
+    const fromTime = new Date(from).getTime();
+    if (!Number.isNaN(fromTime) && fallbackTime < fromTime) {
+      return false;
+    }
+  }
+
+  if (until) {
+    const untilTime = new Date(until).getTime();
+    if (!Number.isNaN(untilTime) && fallbackTime > untilTime) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function createRootOrgUnitRecord() {
+  return {
+    header: {
+      identifier: toOAIIdentifier(ENTITY_TYPE, UNMSM_ROOT.id),
+      datestamp: FALLBACK_DATE,
+      setSpec: 'orgunits',
+    },
+    metadata: {
+      OrgUnit: {
+        '@id': toCerifId(ENTITY_TYPE, UNMSM_ROOT.id),
+        '@xmlns': NAMESPACES.PERUCRIS_CERIF,
+        name: [createTitle(UNMSM_ROOT.nombre)],
+        acronym: UNMSM_ROOT.acronym,
+        type: 'Universidad',
+        lastModified: FALLBACK_DATE,
+        identifiers: filterEmpty([
+          createIdentifier(IDENTIFIER_SCHEMES.RUC, UNMSM_ROOT.ruc),
+          createIdentifier(IDENTIFIER_SCHEMES.ROR, UNMSM_ROOT.ror),
+          createIdentifier(IDENTIFIER_SCHEMES.ISNI, UNMSM_ROOT.isni),
+          createIdentifier(IDENTIFIER_SCHEMES.GRID, UNMSM_ROOT.grid),
+          createIdentifier('http://purl.org/pe-repo/concytec/scopus/affiliationId', UNMSM_ROOT.scopusAffiliationId),
+        ]),
+        countryCode: UNMSM_ROOT.countryCode,
+        classifications: filterEmpty([
+          {
+            scheme: 'https://purl.org/pe-repo/inei/ubigeo',
+            value: UNMSM_ROOT.ubigeo,
+          },
+          {
+            scheme: 'https://purl.org/pe-repo/inei/ciiu',
+            value: UNMSM_ROOT.ciiu,
+          },
+          {
+            scheme: 'https://purl.org/pe-repo/ocde/sector',
+            value: UNMSM_ROOT.sectorOcde,
+          },
+        ]),
+      },
+    },
+  };
+}
+
 /**
  * Mapea una facultad a formato CERIF OrgUnit
  * @param {object} row
@@ -213,12 +275,8 @@ function mapGrupoToCerif(row) {
  * @returns {Promise<number>}
  */
 export async function countOrgUnits(from, until) {
-  // Contar facultades (sin filtro de fecha ya que no tienen updated_at)
-  const [facultades] = await pool.query('SELECT COUNT(*) as total FROM Facultad');
-  
-  // Contar institutos activos
-  const [institutos] = await pool.query('SELECT COUNT(*) as total FROM Instituto WHERE estado = 1');
-  
+  const includeStatic = shouldIncludeStaticOrgUnits(from, until);
+
   // Contar grupos activos (estado = 4 es activo en tabla Grupo)
   const dateFilter = buildDateFilter(from, until);
   let gruposQuery = 'SELECT COUNT(*) as total FROM Grupo WHERE estado = 4';
@@ -226,6 +284,16 @@ export async function countOrgUnits(from, until) {
     gruposQuery += ` AND ${dateFilter.clause}`;
   }
   const [grupos] = await pool.query(gruposQuery, dateFilter.params);
+
+  if (!includeStatic) {
+    return grupos[0].total;
+  }
+
+  // Contar facultades (sin updated_at en origen)
+  const [facultades] = await pool.query('SELECT COUNT(*) as total FROM Facultad');
+
+  // Contar institutos activos (sin updated_at en origen)
+  const [institutos] = await pool.query('SELECT COUNT(*) as total FROM Instituto WHERE estado = 1');
 
   // +1 por UNMSM root
   return 1 + facultades[0].total + institutos[0].total + grupos[0].total;
@@ -240,63 +308,14 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
   const results = [];
   let currentOffset = offset;
   let remaining = limit;
+  const includeStatic = shouldIncludeStaticOrgUnits(from, until);
 
-  // 1. Primero UNMSM root (solo si offset = 0)
-  if (currentOffset === 0 && remaining > 0) {
-    results.push({
-      header: {
-        identifier: toOAIIdentifier(ENTITY_TYPE, UNMSM_ROOT.id),
-        datestamp: FALLBACK_DATE,
-        setSpec: 'orgunits',
-      },
-      metadata: {
-        OrgUnit: {
-          '@id': toCerifId(ENTITY_TYPE, UNMSM_ROOT.id),
-          '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-          name: [createTitle(UNMSM_ROOT.nombre)],
-          acronym: UNMSM_ROOT.acronym,
-          type: 'Universidad',
-          lastModified: FALLBACK_DATE,
-          identifiers: filterEmpty([
-            createIdentifier(IDENTIFIER_SCHEMES.RUC, UNMSM_ROOT.ruc),
-            createIdentifier(IDENTIFIER_SCHEMES.ROR, UNMSM_ROOT.ror),
-            createIdentifier(IDENTIFIER_SCHEMES.ISNI, UNMSM_ROOT.isni),
-            createIdentifier(IDENTIFIER_SCHEMES.GRID, UNMSM_ROOT.grid),
-            createIdentifier('http://purl.org/pe-repo/concytec/scopus/affiliationId', UNMSM_ROOT.scopusAffiliationId),
-          ]),
-          countryCode: UNMSM_ROOT.countryCode,
-          classifications: filterEmpty([
-            {
-              scheme: 'https://purl.org/pe-repo/inei/ubigeo',
-              value: UNMSM_ROOT.ubigeo,
-            },
-            {
-              scheme: 'https://purl.org/pe-repo/inei/ciiu',
-              value: UNMSM_ROOT.ciiu,
-            },
-            {
-              scheme: 'https://purl.org/pe-repo/ocde/sector',
-              value: UNMSM_ROOT.sectorOcde,
-            },
-          ]),
-        },
-      },
-    });
-    remaining--;
-    currentOffset = 0;
-  } else {
-    currentOffset--;
-  }
+  if (includeStatic && remaining > 0) {
+    const staticRecords = [createRootOrgUnitRecord()];
 
-  // 2. Facultades
-  if (remaining > 0) {
-    const [facultades] = await pool.query(
-      'SELECT * FROM Facultad ORDER BY id LIMIT ? OFFSET ?',
-      [remaining, Math.max(0, currentOffset)]
-    );
-
+    const [facultades] = await pool.query('SELECT * FROM Facultad ORDER BY id');
     for (const f of facultades) {
-      results.push({
+      staticRecords.push({
         header: {
           identifier: toOAIIdentifier(ENTITY_TYPE, `F${f.id}`),
           datestamp: FALLBACK_DATE,
@@ -306,24 +325,18 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
           OrgUnit: mapFacultadToCerif(f),
         },
       });
-      remaining--;
     }
-    currentOffset = Math.max(0, currentOffset - facultades.length);
-  }
 
-  // 3. Institutos
-  if (remaining > 0) {
     const [institutos] = await pool.query(`
       SELECT i.*, f.nombre as facultad_nombre
       FROM Instituto i
       LEFT JOIN Facultad f ON i.facultad_id = f.id
       WHERE i.estado = 1
       ORDER BY i.id
-      LIMIT ? OFFSET ?
-    `, [remaining, Math.max(0, currentOffset)]);
+    `);
 
     for (const inst of institutos) {
-      results.push({
+      staticRecords.push({
         header: {
           identifier: toOAIIdentifier(ENTITY_TYPE, `I${inst.id}`),
           datestamp: FALLBACK_DATE,
@@ -333,12 +346,19 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
           OrgUnit: mapInstitutoToCerif(inst),
         },
       });
-      remaining--;
     }
-    currentOffset = Math.max(0, currentOffset - institutos.length);
+
+    if (currentOffset < staticRecords.length) {
+      const page = staticRecords.slice(currentOffset, currentOffset + remaining);
+      results.push(...page);
+      remaining -= page.length;
+      currentOffset = 0;
+    } else {
+      currentOffset -= staticRecords.length;
+    }
   }
 
-  // 4. Grupos
+  // Grupos
   if (remaining > 0) {
     const dateFilter = buildDateFilter(from, until);
     let gruposQuery = `
@@ -390,45 +410,7 @@ export async function getOrgUnitHeaders({ from, until, offset = 0, limit = env.P
 export async function getOrgUnitById(id) {
   // UNMSM root
   if (id === '1' || id === 1) {
-    return {
-      header: {
-        identifier: toOAIIdentifier(ENTITY_TYPE, UNMSM_ROOT.id),
-        datestamp: FALLBACK_DATE,
-        setSpec: 'orgunits',
-      },
-       metadata: {
-         OrgUnit: {
-           '@id': toCerifId(ENTITY_TYPE, UNMSM_ROOT.id),
-           '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-          name: [createTitle(UNMSM_ROOT.nombre)],
-          acronym: UNMSM_ROOT.acronym,
-          type: 'Universidad',
-          lastModified: FALLBACK_DATE,
-          identifiers: filterEmpty([
-            createIdentifier(IDENTIFIER_SCHEMES.RUC, UNMSM_ROOT.ruc),
-            createIdentifier(IDENTIFIER_SCHEMES.ROR, UNMSM_ROOT.ror),
-            createIdentifier(IDENTIFIER_SCHEMES.ISNI, UNMSM_ROOT.isni),
-            createIdentifier(IDENTIFIER_SCHEMES.GRID, UNMSM_ROOT.grid),
-            createIdentifier('http://purl.org/pe-repo/concytec/scopus/affiliationId', UNMSM_ROOT.scopusAffiliationId),
-          ]),
-          countryCode: UNMSM_ROOT.countryCode,
-          classifications: filterEmpty([
-            {
-              scheme: 'https://purl.org/pe-repo/inei/ubigeo',
-              value: UNMSM_ROOT.ubigeo,
-            },
-            {
-              scheme: 'https://purl.org/pe-repo/inei/ciiu',
-              value: UNMSM_ROOT.ciiu,
-            },
-            {
-              scheme: 'https://purl.org/pe-repo/ocde/sector',
-              value: UNMSM_ROOT.sectorOcde,
-            },
-          ]),
-        },
-      },
-    };
+    return createRootOrgUnitRecord();
   }
 
   const prefix = id.charAt(0);

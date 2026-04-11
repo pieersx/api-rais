@@ -1,4 +1,5 @@
 import { env } from '../../config/env.js';
+import { resumptionTokenDataSchema } from '../../schemas/oai-params.schema.js';
 
 /**
  * Codifica los datos de paginacion en un resumptionToken
@@ -74,14 +75,18 @@ export function validateResumptionToken(token) {
     return { valid: false, error: 'Invalid token format' };
   }
 
-  // Validar campos requeridos
-  if (typeof data.cursor !== 'number' || data.cursor < 0) {
-    return { valid: false, error: 'Invalid cursor in token' };
+  const parsed = resumptionTokenDataSchema.safeParse(data);
+  if (!parsed.success) {
+    return { valid: false, error: 'Invalid token payload' };
   }
 
-  if (!data.set) {
-    return { valid: false, error: 'Missing set in token' };
+  if (parsed.data.completeListSize <= 0) {
+    return { valid: false, error: 'Invalid completeListSize in token' };
   }
 
-  return { valid: true, data };
+  if (parsed.data.cursor >= parsed.data.completeListSize) {
+    return { valid: false, error: 'Cursor is out of range' };
+  }
+
+  return { valid: true, data: parsed.data };
 }

@@ -1,11 +1,23 @@
 import { z } from 'zod';
 import { OAI_VERBS, VALID_SETS, METADATA_FORMATS } from '../utils/constants.js';
 
+const iso8601Pattern = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}Z)?$/;
+
 // Schema para validar fechas ISO 8601
 const iso8601Date = z.string().regex(
-  /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}Z)?$/,
+  iso8601Pattern,
   'Fecha debe estar en formato YYYY-MM-DD o YYYY-MM-DDThh:mm:ssZ'
 ).optional();
+
+function isValidDateRange(from, until) {
+  if (!from || !until) return true;
+
+  const fromTime = new Date(from).getTime();
+  const untilTime = new Date(until).getTime();
+
+  if (Number.isNaN(fromTime) || Number.isNaN(untilTime)) return true;
+  return fromTime <= untilTime;
+}
 
 // Schema base para parametros OAI-PMH
 export const baseOaiSchema = z.object({
@@ -45,6 +57,10 @@ const metadataPrefixSchema = z.enum(
   { errorMap: () => ({ message: 'cannotDisseminateFormat' }) }
 );
 
+const listIdentifiersMetadataPrefixSchema = z.literal('perucris-cerif', {
+  errorMap: () => ({ message: 'cannotDisseminateFormat' }),
+});
+
 // Schema para set
 const setSchema = z.enum(VALID_SETS, {
   errorMap: () => ({ message: 'noSetHierarchy' }),
@@ -53,7 +69,7 @@ const setSchema = z.enum(VALID_SETS, {
 // Schema para ListIdentifiers
 export const listIdentifiersSchema = baseOaiSchema.extend({
   verb: z.literal('ListIdentifiers'),
-  metadataPrefix: metadataPrefixSchema.optional(),
+  metadataPrefix: listIdentifiersMetadataPrefixSchema.optional(),
   set: setSchema.optional(),
   from: iso8601Date,
   until: iso8601Date,
@@ -61,6 +77,9 @@ export const listIdentifiersSchema = baseOaiSchema.extend({
 }).refine(
   data => data.resumptionToken || data.metadataPrefix,
   { message: 'badArgument:metadataPrefix required when resumptionToken not provided' }
+).refine(
+  data => isValidDateRange(data.from, data.until),
+  { message: 'badArgument:from must be less than or equal to until' }
 );
 
 // Schema para ListRecords
@@ -101,9 +120,12 @@ export function getSchemaForVerb(verb) {
 // Schema para validar resumptionToken decodificado
 export const resumptionTokenDataSchema = z.object({
   set: setSchema,
-  metadataPrefix: z.string(),
-  from: z.string().optional(),
-  until: z.string().optional(),
+  metadataPrefix: metadataPrefixSchema,
+  from: z.string().regex(iso8601Pattern).optional(),
+  until: z.string().regex(iso8601Pattern).optional(),
   cursor: z.number().int().min(0),
   completeListSize: z.number().int().min(0),
-});
+}).refine(
+  data => isValidDateRange(data.from, data.until),
+  { message: 'from must be less than or equal to until' }
+);
