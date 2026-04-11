@@ -1,5 +1,5 @@
-import { z } from 'zod';
 import dotenv from 'dotenv';
+import { z } from 'zod';
 
 dotenv.config();
 
@@ -40,7 +40,7 @@ export const OAI_DOMAIN = urlObj.hostname;
 
 // Configuración del repositorio
 export const REPOSITORY_CONFIG = {
-  repositoryName: 'RAIS - Repositorio Académico de Investigación UNMSM',
+  repositoryName: 'RAIS (Registro de Actividades de Investigación San Marcos)',
   baseURL: env.BASE_URL,
   protocolVersion: '2.0',
   adminEmail: env.ADMIN_EMAIL,

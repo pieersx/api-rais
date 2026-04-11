@@ -1,4 +1,5 @@
 import { getSchemaForVerb } from '../schemas/oai-params.schema.js';
+import { VALID_PARAMS_BY_VERB } from '../schemas/oai-params.schema.js';
 import { OAI_VERBS } from '../utils/constants.js';
 
 /**
@@ -21,6 +22,19 @@ export function verbValidator(req, res, next) {
     req.oaiError = {
       code: 'badVerb',
       message: `The value "${verb}" is not a legal OAI-PMH verb`,
+    };
+    return next();
+  }
+
+  // Validar que no haya parámetros extra (según Directrices PerúCRIS)
+  const validParams = VALID_PARAMS_BY_VERB[verb] || [];
+  const receivedParams = Object.keys(req.query);
+  const invalidParams = receivedParams.filter(p => !validParams.includes(p));
+
+  if (invalidParams.length > 0) {
+    req.oaiError = {
+      code: 'badArgument',
+      message: `The request includes illegal arguments: ${invalidParams.join(', ')}`,
     };
     return next();
   }

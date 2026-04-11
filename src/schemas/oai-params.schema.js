@@ -14,6 +14,16 @@ export const baseOaiSchema = z.object({
   }),
 });
 
+// Parámetros válidos por verbo (para validación posterior)
+export const VALID_PARAMS_BY_VERB = {
+  Identify: ['verb'],
+  ListMetadataFormats: ['verb'],
+  ListSets: ['verb', 'resumptionToken'],
+  ListIdentifiers: ['verb', 'metadataPrefix', 'set', 'from', 'until', 'resumptionToken'],
+  ListRecords: ['verb', 'metadataPrefix', 'set', 'from', 'until', 'resumptionToken'],
+  GetRecord: ['verb', 'identifier', 'metadataPrefix'],
+};
+
 // Schema para Identify
 export const identifySchema = baseOaiSchema.extend({
   verb: z.literal('Identify'),
@@ -22,7 +32,6 @@ export const identifySchema = baseOaiSchema.extend({
 // Schema para ListMetadataFormats
 export const listMetadataFormatsSchema = baseOaiSchema.extend({
   verb: z.literal('ListMetadataFormats'),
-  identifier: z.string().optional(),
 });
 
 // Schema para ListSets
