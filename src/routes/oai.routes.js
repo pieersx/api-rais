@@ -28,7 +28,7 @@ router.get('/', async (req, res) => {
     switch (verb) {
       case 'Identify':
         result = identify();
-        return res.json(createOaiResponse('Identify', result, params));
+        return res.json(createOaiResponse('Identify', result, params, 'full'));
 
       case 'ListMetadataFormats':
         result = listMetadataFormats();
@@ -50,7 +50,7 @@ router.get('/', async (req, res) => {
         if (result.error) {
           return res.json(createOaiError(result.error.code, result.error.message, params));
         }
-        return res.json(createOaiResponse('ListRecords', result, params));
+        return res.json(createOaiResponse('ListRecords', result, params, 'xsi'));
 
       case 'GetRecord':
         result = await getRecord(params);

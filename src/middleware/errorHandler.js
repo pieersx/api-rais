@@ -50,23 +50,46 @@ function buildRequestAttrs(params) {
  * @param {string} verb - Verbo OAI-PMH
  * @param {object} content - Contenido de la respuesta
  * @param {object} request - Parametros del request
+ * @param {string} namespaceLevel - Nivel de namespaces XSD ('basic', 'xsi', 'full')
+ *   - 'basic': solo @xmlns (ListMetadataFormats, ListSets, ListIdentifiers, GetRecord)
+ *   - 'xsi': @xmlns + @xmlns:xsi (ListRecords)
+ *   - 'full': @xmlns + @xmlns:xsi + @xsi:schemaLocation (Identify)
  * @returns {object}
  */
-export function createOaiResponse(verb, content, request = {}) {
-  return {
-    'OAI-PMH': {
-      '@xmlns': NAMESPACES.OAI_PMH,
-      '@xmlns:xsi': NAMESPACES.OAI_PMH_XSI,
-      '@xsi:schemaLocation': NAMESPACES.OAI_PMH_SCHEMA_LOCATION,
-      responseDate: nowISO8601(),
-      request: {
-        '@verb': verb,
-        ...buildRequestAttrs(request),
-        '#text': REPOSITORY_CONFIG.baseURL,
-      },
-      [verb]: content,
-    },
+export function createOaiResponse(verb, content, request = {}, namespaceLevel = 'basic') {
+  // Construir atributos namespace primero (en orden correcto)
+  const attributes = {
+    '@xmlns': NAMESPACES.OAI_PMH,
   };
+
+  if (namespaceLevel === 'full') {
+    // Identify: 3 namespaces
+    attributes['@xmlns:xsi'] = NAMESPACES.OAI_PMH_XSI;
+    attributes['@xsi:schemaLocation'] = NAMESPACES.OAI_PMH_SCHEMA_LOCATION;
+  } else if (namespaceLevel === 'xsi') {
+    // ListRecords: 2 namespaces
+    attributes['@xmlns:xsi'] = NAMESPACES.OAI_PMH_XSI;
+  }
+  // namespaceLevel === 'basic': solo @xmlns (default, sin más atributos)
+
+  // Construir elementos normales
+  const elements = {
+    responseDate: nowISO8601(),
+    request: {
+      '@verb': verb,
+      ...buildRequestAttrs(request),
+      '#text': REPOSITORY_CONFIG.baseURL,
+    },
+    [verb]: content,
+  };
+
+  // Combinar: atributos primero, luego elementos
+  const oaiPmh = {
+    ...attributes,
+    ...elements,
+  };
+
+  return { 'OAI-PMH': oaiPmh };
 }
 
 /**
