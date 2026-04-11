@@ -11,6 +11,8 @@ import * as patentRepo from '../../repositories/patent.repository.js';
 import * as fundingRepo from '../../repositories/funding.repository.js';
 import * as equipmentRepo from '../../repositories/equipment.repository.js';
 
+const REQUIRED_METADATA_PREFIX = 'perucris-cerif';
+
 // Mapeo de set a repositorio
 const repositories = {
   persons: {
@@ -69,6 +71,15 @@ export async function listRecords(params) {
   // Verificar set
   if (!set) {
     return { error: { code: 'badArgument', message: 'set argument is required' } };
+  }
+
+  if (metadataPrefix !== REQUIRED_METADATA_PREFIX) {
+    return {
+      error: {
+        code: 'cannotDisseminateFormat',
+        message: 'The metadata format is not supported by this repository',
+      },
+    };
   }
 
   const repo = repositories[set];

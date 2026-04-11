@@ -57,7 +57,7 @@ const metadataPrefixSchema = z.enum(
   { errorMap: () => ({ message: 'cannotDisseminateFormat' }) }
 );
 
-const listIdentifiersMetadataPrefixSchema = z.literal('perucris-cerif', {
+const perucrisMetadataPrefixSchema = z.literal('perucris-cerif', {
   errorMap: () => ({ message: 'cannotDisseminateFormat' }),
 });
 
@@ -69,7 +69,7 @@ const setSchema = z.enum(VALID_SETS, {
 // Schema para ListIdentifiers
 export const listIdentifiersSchema = baseOaiSchema.extend({
   verb: z.literal('ListIdentifiers'),
-  metadataPrefix: listIdentifiersMetadataPrefixSchema.optional(),
+  metadataPrefix: perucrisMetadataPrefixSchema.optional(),
   set: setSchema.optional(),
   from: iso8601Date,
   until: iso8601Date,
@@ -85,7 +85,7 @@ export const listIdentifiersSchema = baseOaiSchema.extend({
 // Schema para ListRecords
 export const listRecordsSchema = baseOaiSchema.extend({
   verb: z.literal('ListRecords'),
-  metadataPrefix: metadataPrefixSchema.optional(),
+  metadataPrefix: perucrisMetadataPrefixSchema.optional(),
   set: setSchema.optional(),
   from: iso8601Date,
   until: iso8601Date,
@@ -93,6 +93,9 @@ export const listRecordsSchema = baseOaiSchema.extend({
 }).refine(
   data => data.resumptionToken || data.metadataPrefix,
   { message: 'badArgument:metadataPrefix required when resumptionToken not provided' }
+).refine(
+  data => isValidDateRange(data.from, data.until),
+  { message: 'badArgument:from must be less than or equal to until' }
 );
 
 // Schema para GetRecord
