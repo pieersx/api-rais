@@ -1,0 +1,27 @@
+aws_region   = "us-east-1"
+project_name = "rais-api"
+environment  = "dev"
+
+db_name           = "rais"
+db_username       = "raisadmin"
+db_password       = "CHANGE_THIS_PASSWORD"
+db_instance_class = "db.t4g.micro"
+
+# Temporary setting for import/tests. Restrict this CIDR after validating.
+db_allowed_cidrs = [
+  "0.0.0.0/0"
+]
+
+admin_email = "rais@unmsm.edu.pe"
+page_size   = 100
+
+# Keep false for first apply. Set true after first Docker image is in ECR.
+create_apprunner_service = false
+
+# First apply can keep example.com; then replace with:
+# https://<apprunner_service_url>/oai
+base_url = "https://example.com/oai"
+
+github_repository          = "pieersx/api-rais"
+create_github_oidc_provider = false
+github_oidc_provider_arn    = "arn:aws:iam::<account-id>:oidc-provider/token.actions.githubusercontent.com"

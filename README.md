@@ -27,6 +27,13 @@ RAIS-API implementa el protocolo **OAI-PMH 2.0** (Open Archives Initiative Proto
 | **Zod** | v4+ Schema validation |
 | **pnpm** | Package manager |
 
+## Despliegue en AWS (pruebas)
+
+- Infraestructura Terraform: `infra/terraform/`
+- Pipeline CI/CD: `.github/workflows/deploy.yml`
+- Guía paso a paso: `docs/aws-deploy.md`
+- Scripts de base de datos: `scripts/db/`
+
 ## Instalación
 
 ### 1. Clonar y dependencias

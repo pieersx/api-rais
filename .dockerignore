@@ -1,0 +1,17 @@
+.git
+.github
+node_modules
+npm-debug.log*
+pnpm-debug.log*
+
+.env
+.env.*
+!.env.example
+
+database
+docs
+infra
+scripts
+
+api.http
+*.md

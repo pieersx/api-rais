@@ -30,6 +30,10 @@ Thumbs.db
 .eslintcache
 *.tsbuildinfo
 
+# Python cache
+__pycache__/
+*.py[cod]
+
 /rais/
 /informe-marzo-2026-borrador.md
 /INFORME_1er Pago Bolsa -2026.docx
@@ -39,6 +43,8 @@ infra/terraform/.terraform/
 infra/terraform/*.tfstate
 infra/terraform/*.tfstate.*
 infra/terraform/crash.log
+infra/terraform/*.tfvars
+!infra/terraform/*.tfvars.example
 
 # Local database backups/dumps
 database/dumps/**
