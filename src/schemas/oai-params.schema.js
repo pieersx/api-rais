@@ -18,7 +18,7 @@ export const baseOaiSchema = z.object({
 export const VALID_PARAMS_BY_VERB = {
   Identify: ['verb'],
   ListMetadataFormats: ['verb'],
-  ListSets: ['verb', 'resumptionToken'],
+  ListSets: ['verb'],
   ListIdentifiers: ['verb', 'metadataPrefix', 'set', 'from', 'until', 'resumptionToken'],
   ListRecords: ['verb', 'metadataPrefix', 'set', 'from', 'until', 'resumptionToken'],
   GetRecord: ['verb', 'identifier', 'metadataPrefix'],
@@ -37,7 +37,6 @@ export const listMetadataFormatsSchema = baseOaiSchema.extend({
 // Schema para ListSets
 export const listSetsSchema = baseOaiSchema.extend({
   verb: z.literal('ListSets'),
-  resumptionToken: z.string().optional(),
 });
 
 // Schema para metadataPrefix
