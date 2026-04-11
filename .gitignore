@@ -1,6 +1,10 @@
 node_modules/
 dist/
 coverage/
+.nyc_output/
+
+# Package manager caches
+.pnpm-store/
 
 .env
 .env.*
@@ -9,6 +13,11 @@ coverage/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.pid
+*.pid.lock
+*.seed
 
 .DS_Store
 Thumbs.db
@@ -16,6 +25,25 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Build/tool caches
+.cache/
+.eslintcache
+*.tsbuildinfo
+
 /rais/
 /informe-marzo-2026-borrador.md
 /INFORME_1er Pago Bolsa -2026.docx
+
+# Terraform local state
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/crash.log
+
+# Local database backups/dumps
+database/dumps/**
+!database/dumps/
+!database/dumps/raw/
+!database/dumps/raw/.gitkeep
+!database/dumps/aws-rds/
+!database/dumps/aws-rds/.gitkeep
