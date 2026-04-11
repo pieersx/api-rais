@@ -56,6 +56,8 @@ export function createOaiResponse(verb, content, request = {}) {
   return {
     'OAI-PMH': {
       '@xmlns': NAMESPACES.OAI_PMH,
+      '@xmlns:xsi': NAMESPACES.OAI_PMH_XSI,
+      '@xsi:schemaLocation': NAMESPACES.OAI_PMH_SCHEMA_LOCATION,
       responseDate: nowISO8601(),
       request: {
         '@verb': verb,

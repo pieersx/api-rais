@@ -6,6 +6,8 @@
 // Namespaces
 export const NAMESPACES = {
   OAI_PMH: 'http://www.openarchives.org/OAI/2.0/',
+  OAI_PMH_XSI: 'http://www.w3.org/2001/XMLSchema-instance',
+  OAI_PMH_SCHEMA_LOCATION: 'http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd',
   PERUCRIS_CERIF: 'https://purl.org/pe-repo/perucris/cerif',
   CERIF_MODEL: 'https://w3id.org/cerif/model',
 };
