@@ -32,7 +32,6 @@ function mapToCerif(row, inventors = [], holders = []) {
   const titleValue = row.titulo || `Patente ${row.id}`;
 
   const patent = {
-    id: toCerifId(ENTITY_TYPE, row.id),
     '@id': toCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     type: typeUri,

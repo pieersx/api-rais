@@ -71,7 +71,6 @@ function mapToCerif(row) {
   const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
 
   const funding = {
-    id: toCerifId(ENTITY_TYPE, fundingId),
     '@id': toCerifId(ENTITY_TYPE, fundingId),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     type: buildFundingType(row),

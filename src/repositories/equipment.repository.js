@@ -39,7 +39,6 @@ function mapToCerif(row) {
   const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
 
   const equipment = {
-    id: equipmentId,
     '@id': equipmentId,
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     identifiers: filterEmpty([

@@ -32,7 +32,6 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
   const titleValue = row.titulo || row.publicacion_nombre || `Publicación ${row.id}`;
 
   const publication = {
-    id: toCerifId(ENTITY_TYPE, row.id),
     '@id': toCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     type: {

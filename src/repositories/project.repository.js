@@ -129,7 +129,6 @@ function mapToCerif(row, integrantes = [], ocde = null, abstract = null, outputs
   const titleValue = row.titulo || row.codigo_proyecto || `Proyecto ${row.id}`;
 
   const project = {
-    id: toCerifId(ENTITY_TYPE, row.id),
     '@id': toCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     title: filterEmpty([createTitle(titleValue, 'es')]),

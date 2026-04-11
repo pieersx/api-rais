@@ -100,7 +100,6 @@ function mapToCerif(row, affiliation = null) {
   }
 
   const person = {
-    id: toCerifId(ENTITY_TYPE, row.id),
     '@id': toCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     personName: {

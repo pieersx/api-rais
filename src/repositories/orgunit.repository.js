@@ -44,7 +44,6 @@ function mapFacultadToCerif(row) {
   const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
 
   const orgUnit = {
-    id: toCerifId(ENTITY_TYPE, `F${row.id}`),
     '@id': toCerifId(ENTITY_TYPE, `F${row.id}`),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     name: [createTitle(row.nombre)],
@@ -88,7 +87,6 @@ function mapInstitutoToCerif(row) {
   const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
 
   const orgUnit = {
-    id: toCerifId(ENTITY_TYPE, `I${row.id}`),
     '@id': toCerifId(ENTITY_TYPE, `I${row.id}`),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     name: [createTitle(row.instituto)],
@@ -134,7 +132,6 @@ function mapGrupoToCerif(row) {
   const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
 
   const orgUnit = {
-    id: toCerifId(ENTITY_TYPE, `G${row.id}`),
     '@id': toCerifId(ENTITY_TYPE, `G${row.id}`),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     name: [createTitle(row.grupo_nombre)],
@@ -254,7 +251,6 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
       },
       metadata: {
         OrgUnit: {
-          id: toCerifId(ENTITY_TYPE, UNMSM_ROOT.id),
           '@id': toCerifId(ENTITY_TYPE, UNMSM_ROOT.id),
           '@xmlns': NAMESPACES.PERUCRIS_CERIF,
           name: [createTitle(UNMSM_ROOT.nombre)],
@@ -400,11 +396,10 @@ export async function getOrgUnitById(id) {
         datestamp: FALLBACK_DATE,
         setSpec: 'orgunits',
       },
-      metadata: {
-        OrgUnit: {
-          id: toCerifId(ENTITY_TYPE, UNMSM_ROOT.id),
-          '@id': toCerifId(ENTITY_TYPE, UNMSM_ROOT.id),
-          '@xmlns': NAMESPACES.PERUCRIS_CERIF,
+       metadata: {
+         OrgUnit: {
+           '@id': toCerifId(ENTITY_TYPE, UNMSM_ROOT.id),
+           '@xmlns': NAMESPACES.PERUCRIS_CERIF,
           name: [createTitle(UNMSM_ROOT.nombre)],
           acronym: UNMSM_ROOT.acronym,
           type: 'Universidad',
