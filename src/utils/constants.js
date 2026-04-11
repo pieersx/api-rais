@@ -14,6 +14,11 @@ export const NAMESPACES = {
 
 // Metadata Prefixes soportados
 export const METADATA_FORMATS = {
+  OAI_DC: {
+    metadataPrefix: 'oai_dc',
+    schema: 'http://www.openarchives.org/OAI/2.0/oai_dc.xsd',
+    metadataNamespace: 'http://www.openarchives.org/OAI/2.0/oai_dc/',
+  },
   PERUCRIS_CERIF: {
     metadataPrefix: 'perucris-cerif',
     schema: 'https://purl.org/pe-repo/perucris/cerif.xsd',
