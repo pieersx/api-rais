@@ -18,9 +18,6 @@ GET http://localhost:3000/oai?verb=Identify
 ### ListMetadataFormats - Sin identificador (todos los formatos)
 GET http://localhost:3000/oai?verb=ListMetadataFormats
 
-### ListMetadataFormats - Para un registro especifico
-GET http://localhost:3000/oai?verb=ListMetadataFormats&identifier=oai:rais.unmsm.edu.pe:Persons/166
-
 ### =============================================================================
 ### 3. LIST SETS - Conjuntos disponibles
 ### =============================================================================
