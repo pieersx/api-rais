@@ -117,78 +117,78 @@ GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&ident
 ### -----------------------------------------------------------------------------
 
 ### Publication ID=68172: Oral Care and Lifestyle Habits...
-### Tiene: DOI, ISSN, revista, volumen, paginas (571-585), fecha 2025
-GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Publications/40724
+### Tiene: DOI, ISSN, revista, volumen/issue (1/1), paginas (571-585), originatesFrom
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Publications/68172
 
-### Publication ID=68095: Analisis de la degradacion de suelos costeros...
-### Tiene: DOI, ISSN, revista, volumen (22), paginas (79-88), fecha 2025
-GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Publications/68095
+### Publication ID=68069: Scientific Mapping of Blood Incompatibility...
+### Tiene: DOI, doble ISSN, revista, volumen/issue (16/1), paginas (212-219)
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Publications/68069
 
-### Publication ID=68071: Bibliometric Exploration of the Global Scientific...
-### Tiene: DOI, ISSN, revista, volumen (16), paginas (354-358), fecha 2024
-GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Publications/68071
+### Publication ID=51336: Tesis con metadatos RENATI
+### Tiene: Handle, advisors, renatiType, inSupportOf.qualification (maestro + grantor)
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Publications/51336
 
 ### -----------------------------------------------------------------------------
 ### PROJECT - Registros con campos mas completos
 ### Campos M: id, title, identifiers, participants, lastModified
 ### -----------------------------------------------------------------------------
 
-### Project ID=13172: ECOTECH-MACAW (con monto S/ 989,809)
-### Tiene: codigo, fecha_inicio, fecha_fin, monto, campo OCDE (Zoologia)
-GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Projects/165
-
-### Project ID=13915: Biomarcadores TGFbeta (con monto S/ 625,100)
-### Tiene: codigo, fechas (2024-2027), campo OCDE (Salud Publica)
-GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Projects/13915
-
-### Project ID=13892: Microbiota intestinal (con monto S/ 788,780)
-### Tiene: codigo, fechas (2025-2027), campo OCDE (Ciencias Veterinarias)
+### Project ID=13892: Microbiota intestinal y diversidad inmunogenetica
+### Tiene: codigo, fechas (2025-2027), 11 participantes, outputs y funding relacionado
 GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Projects/13892
+
+### Project ID=13813: Areas Naturales Protegidas y cambio climatico
+### Tiene: codigo, fechas (2024-2027), 10 participantes, keywords y outputs
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Projects/13813
+
+### Project ID=13915: Biomarcadores TGFbeta
+### Tiene: codigo, fechas (2024-2027), keywords, abstract y funding relacionado
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Projects/13915
 
 ### -----------------------------------------------------------------------------
 ### FUNDING - Ejemplos de financiamiento por proyecto
 ### Campos M: id, type, identifiers(AwardNumber), title, fundedBy, lastModified
 ### -----------------------------------------------------------------------------
 
-### Funding principal (referenciado al proyecto 1)
-GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Fundings/P165
+### Funding ID=P13915 (monto PEN 625100)
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Fundings/P13915
 
-### Funding del proyecto 2
-GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Fundings/P2
+### Funding ID=P13892 (monto PEN 788780)
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Fundings/P13892
 
-### Funding del proyecto 3
-GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Fundings/P3
+### Funding ID=P13813 (monto PEN 844491)
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Fundings/P13813
 
 ### -----------------------------------------------------------------------------
 ### EQUIPMENT - Ejemplos de equipamiento cientifico
 ### Campos M: id, identifiers(CRISID), type, name, owner, lastModified
 ### -----------------------------------------------------------------------------
 
-### Equipment ID=1
-GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Equipments/1
+### Equipment ID=166: Laboratorio de modelamiento y simulacion computacional
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Equipments/166
 
-### Equipment ID=2
-GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Equipments/2
+### Equipment ID=82: Laboratorio de reproduccion y biologia del desarrollo
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Equipments/82
 
-### Equipment ID=3
-GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Equipments/3
+### Equipment ID=79: Laboratorio de Investigacion y Desarrollo
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Equipments/79
 
 ### -----------------------------------------------------------------------------
 ### PATENT - Registros con mas campos completos
 ### Campos M: id, patentNumber, title, type, subjects(CIP), lastModified
 ### -----------------------------------------------------------------------------
 
-### Patent ID=6: Nanoparticulas de cobre
-### Tiene: nro_registro (8112), tipo (Patente de invencion), fecha, oficina (INDECOPI), expediente, titular
-GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Patents/6
+### Patent ID=427: Equipo de electrohilado
+### Tiene: patentNumber, registrationDate, inventors, holders, issuer, expediente y URL
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Patents/427
 
-### Patent ID=71: Method for evaluating sensitivity (USPTO)
-### Tiene: nro_registro (9194869), tipo, fecha, oficina (USPTO), expediente internacional
-GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Patents/71
+### Patent ID=467: Piano de aprendizaje didactico autosuficiente
+### Tiene: inventors, holders, abstract, patentNumber y expediente
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Patents/467
 
-### Patent ID=92: Light Concentration Device (China)
-### Tiene: nro_registro (CN_105247690_B), patente internacional China
-GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Patents/92
+### Patent ID=548: Cintas superconductoras multicapas
+### Tiene: patentNumber internacional, inventors, holders y subjects IPC
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Patents/548
 
 ### =============================================================================
 ### FUNCIONALIDADES OAI-PMH ADICIONALES
