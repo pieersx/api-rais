@@ -61,6 +61,14 @@ const perucrisMetadataPrefixSchema = z.literal('perucris-cerif', {
   errorMap: () => ({ message: 'cannotDisseminateFormat' }),
 });
 
+const requiredPerucrisMetadataPrefixSchema = z.string({
+  required_error: 'badArgument:metadataPrefix is required',
+  invalid_type_error: 'badArgument:metadataPrefix is required',
+}).min(1, 'badArgument:metadataPrefix is required').refine(
+  value => value === 'perucris-cerif',
+  { message: 'cannotDisseminateFormat' }
+);
+
 // Schema para set
 const setSchema = z.enum(VALID_SETS, {
   errorMap: () => ({ message: 'noSetHierarchy' }),
@@ -101,7 +109,7 @@ export const listRecordsSchema = baseOaiSchema.extend({
 // Schema para GetRecord
 export const getRecordSchema = baseOaiSchema.extend({
   verb: z.literal('GetRecord'),
-  metadataPrefix: metadataPrefixSchema,
+  metadataPrefix: requiredPerucrisMetadataPrefixSchema,
   identifier: z.string({
     required_error: 'badArgument:identifier is required',
   }).min(1),

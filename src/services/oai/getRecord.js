@@ -1,4 +1,5 @@
 import { parseOAIIdentifier } from '../../utils/formatters.js';
+import { OAI_DOMAIN } from '../../config/env.js';
 
 // Importar repositorios
 import * as personRepo from '../../repositories/person.repository.js';
@@ -24,6 +25,8 @@ const repositories = {
   Equipment: equipmentRepo.getEquipmentById,
 };
 
+const REQUIRED_METADATA_PREFIX = 'perucris-cerif';
+
 /**
  * Servicio GetRecord - Retorna un registro individual
  * @param {object} params
@@ -31,6 +34,15 @@ const repositories = {
  */
 export async function getRecord(params) {
   const { identifier, metadataPrefix } = params;
+
+  if (metadataPrefix !== REQUIRED_METADATA_PREFIX) {
+    return {
+      error: {
+        code: 'cannotDisseminateFormat',
+        message: 'The metadata format is not supported by this repository',
+      },
+    };
+  }
 
   // Parsear el identificador OAI
   const parsed = parseOAIIdentifier(identifier);
@@ -44,7 +56,16 @@ export async function getRecord(params) {
     };
   }
 
-  const { entityType, id } = parsed;
+  const { domain, entityType, id } = parsed;
+
+  if (String(domain).toLowerCase() !== String(OAI_DOMAIN).toLowerCase()) {
+    return {
+      error: {
+        code: 'idDoesNotExist',
+        message: `The identifier '${identifier}' does not exist in this repository`,
+      },
+    };
+  }
 
   // Verificar que el entityType es soportado
   const getById = repositories[entityType];
