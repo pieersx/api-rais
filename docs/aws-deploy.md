@@ -15,6 +15,13 @@ Este repositorio usa:
 5. Configurar variables/secrets en GitHub Actions.
 6. Hacer push a `main` para desplegar.
 
+## Requisitos locales
+
+- AWS CLI autenticado
+- Terraform >= 1.6
+- Docker (obligatorio para build/push y recomendado para import SQL)
+- MySQL local es opcional; `scripts/db/import-rds.sh` puede usar Docker
+
 ## 1) Infraestructura
 
 ```bash
@@ -66,8 +73,11 @@ RDS_HOST=<rds-endpoint> \
 RDS_USER=<db-user> \
 RDS_PASSWORD=<db-password> \
 RDS_DB_NAME=rais \
+USE_DOCKER_MYSQL=true \
 bash scripts/db/import-rds.sh
 ```
+
+Si no defines `USE_DOCKER_MYSQL`, el script usa `auto`: primero intenta cliente `mysql` local y, si no existe, usa `docker run mysql:8`.
 
 ## 5) Variables de GitHub Actions
 

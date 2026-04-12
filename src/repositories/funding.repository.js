@@ -17,10 +17,25 @@ import {
 
 const ENTITY_TYPE = 'Fundings';
 const FALLBACK_DATE = '2014-01-01T00:00:00Z';
+const FUNDING_APORTE_TOTAL = `
+  (
+    COALESCE(p.aporte_unmsm, 0)
+    + COALESCE(p.aporte_no_unmsm, 0)
+    + COALESCE(p.financiamiento_fuente_externa, 0)
+    + COALESCE(p.entidad_asociada, 0)
+  )
+`;
 const FUNDING_ELIGIBILITY = `
   (
     (p.codigo_proyecto IS NOT NULL AND p.codigo_proyecto <> '')
-    OR (COALESCE(p.aporte_unmsm, 0) + COALESCE(p.aporte_no_unmsm, 0) + COALESCE(p.financiamiento_fuente_externa, 0) + COALESCE(p.entidad_asociada, 0)) > 0
+    OR ${FUNDING_APORTE_TOTAL} > 0
+    OR EXISTS (
+      SELECT 1
+      FROM Proyecto_presupuesto pp
+      WHERE pp.proyecto_id = p.id
+        AND IFNULL(pp.estado, 1) = 1
+        AND COALESCE(pp.monto, 0) > 0
+    )
     OR p.convocatoria IS NOT NULL
   )
 `;
@@ -52,11 +67,14 @@ function buildFundingType(row) {
 }
 
 function buildFundingAmount(row) {
-  const total =
+  const presupuestoTotal = Number(row.monto_presupuesto_total || 0);
+  const totalFromAportes =
     Number(row.aporte_unmsm || 0)
     + Number(row.aporte_no_unmsm || 0)
     + Number(row.financiamiento_fuente_externa || 0)
     + Number(row.entidad_asociada || 0);
+
+  const total = presupuestoTotal > 0 ? presupuestoTotal : totalFromAportes;
 
   if (total <= 0) return null;
 
@@ -64,6 +82,20 @@ function buildFundingAmount(row) {
     value: Math.round(total),
     currency: 'PEN',
   };
+}
+
+function buildBudgetBreakdown(row) {
+  const breakdown = [];
+
+  const bienes = Math.round(Number(row.monto_bienes || 0));
+  const servicios = Math.round(Number(row.monto_servicios || 0));
+  const otros = Math.round(Number(row.monto_otros || 0));
+
+  if (bienes > 0) breakdown.push(`Bienes: ${bienes}`);
+  if (servicios > 0) breakdown.push(`Servicios: ${servicios}`);
+  if (otros > 0) breakdown.push(`Otros: ${otros}`);
+
+  return breakdown;
 }
 
 function mapToCerif(row) {
@@ -128,6 +160,7 @@ function mapToCerif(row) {
   }
 
   const descriptionParts = [];
+  descriptionParts.push(...buildBudgetBreakdown(row));
   if (row.tipo_proyecto) descriptionParts.push(`Tipo de proyecto: ${row.tipo_proyecto}`);
   if (row.facultad_nombre) descriptionParts.push(`Facultad: ${row.facultad_nombre}`);
 
@@ -162,9 +195,29 @@ function getBaseFundingSelect() {
       p.entidad_asociada,
       p.updated_at,
       f.nombre as facultad_nombre,
+      pb.monto_presupuesto_total,
+      pb.monto_bienes,
+      pb.monto_servicios,
+      pb.monto_otros,
       sv.monto_subvencion
     FROM Proyecto p
     LEFT JOIN Facultad f ON f.id = p.facultad_id
+    LEFT JOIN (
+      SELECT
+        pp.proyecto_id,
+        SUM(COALESCE(pp.monto, 0)) AS monto_presupuesto_total,
+        SUM(CASE WHEN LOWER(TRIM(pa.tipo)) = 'bienes' THEN COALESCE(pp.monto, 0) ELSE 0 END) AS monto_bienes,
+        SUM(CASE WHEN LOWER(TRIM(pa.tipo)) = 'servicios' THEN COALESCE(pp.monto, 0) ELSE 0 END) AS monto_servicios,
+        SUM(CASE
+          WHEN pa.tipo IS NULL OR LOWER(TRIM(pa.tipo)) NOT IN ('bienes', 'servicios')
+          THEN COALESCE(pp.monto, 0)
+          ELSE 0
+        END) AS monto_otros
+      FROM Proyecto_presupuesto pp
+      LEFT JOIN Partida pa ON pa.id = pp.partida_id
+      WHERE IFNULL(pp.estado, 1) = 1
+      GROUP BY pp.proyecto_id
+    ) pb ON pb.proyecto_id = p.id
     LEFT JOIN (
       SELECT
         proyecto_id,

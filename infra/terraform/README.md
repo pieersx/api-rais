@@ -13,6 +13,7 @@ Este Terraform crea infraestructura de pruebas para la API:
 - AWS CLI autenticado (`aws sts get-caller-identity`)
 - Cuenta AWS con VPC default activa
 - GitHub OIDC provider ya creado en IAM o habilitar `create_github_oidc_provider = true`
+- Docker disponible (build/push de imagen y opcion para import SQL)
 
 ## 2) Configurar variables
 
@@ -90,8 +91,11 @@ RDS_USER=<db-username> \
 RDS_PASSWORD=<db-password> \
 RDS_DB_NAME=rais \
 DUMP_PATH=../../database/dumps/aws-rds/rais-full-backup-2026.rds.sql \
+USE_DOCKER_MYSQL=true \
 bash ../../scripts/db/import-rds.sh
 ```
+
+`USE_DOCKER_MYSQL` acepta `auto|true|false`. En `auto`, usa cliente local `mysql` si existe; de lo contrario importa con Docker (`mysql:8`).
 
 ## 7) Configurar GitHub Actions
 
