@@ -1,7 +1,24 @@
 # API PerúCRIS — Guía Completa para Implementación
 > **Fuentes:** Directrices #PerúCRIS v1.1 (CONCYTEC, Junio 2024) + Guía de APIs JSON (CONCYTEC, Marzo 2026)
 > **Protocolo:** OAI-PMH 2.0 | **Formato:** CERIF JSON | **Namespace:** `https://purl.org/pe-repo/perucris/cerif`
-> **metadataPrefix:** `perucris-cerif` | **Base:** CERIF 1.5 + OpenAIRE Guidelines v1.1.1
+> **metadataPrefix (JSON guía):** `perucris-cerif`
+> **metadataPrefix (Directrices XML - CANÓNICO):** `cerif_perucris` | **Base:** CERIF 1.5 + OpenAIRE Guidelines v1.1.1
+
+> ⚠️ **Nota técnica:**
+> Existe una inconsistencia entre la Guía JSON y las Directrices PerúCRIS v1.1 respecto al `metadataPrefix`.
+> Para efectos de interoperabilidad oficial, se debe considerar como valor canónico el definido en las Directrices (CERIF-XML): `cerif_perucris`.
+> El valor `perucris-cerif` corresponde únicamente a ejemplos de la guía JSON.
+
+> ⚠️ **IMPORTANTE — CONSISTENCIA XML vs JSON**
+> En caso de inconsistencias entre JSON y XML:
+> 👉 **PREVALECE EL XML OFICIAL**
+>
+> JSON es una representación adaptada para APIs,
+> pero debe respetar estrictamente la estructura y vocabularios del XML.
+
+> **Perfiles a distinguir en esta guía:**
+> - **XML oficial v1.1 (canónico):** `metadataPrefix=cerif_perucris` · `metadataNamespace=https://purl.org/pe-repo/cerif-profile/1.0/` · `schema=https://purl.org/pe-repo/cerif-profile/1.0/perucris-cerif-profile.xsd`
+> - **Guía JSON 2026 (adaptada para APIs):** `metadataPrefix=perucris-cerif` · `metadataNamespace=https://purl.org/pe-repo/perucris/cerif` · `schema=https://purl.org/pe-repo/perucris/cerif.xsd`
 
 ---
 
@@ -85,6 +102,12 @@
 | `fundings` | Financiamientos |
 | `equipments` | Equipamientos |
 | `patents` | Patentes |
+| `products` | Productos de investigación *(la guía JSON abreviada suele omitirlo, pero el perfil XML oficial sí lo contempla)* |
+
+> ⚠️ **Nota técnica:**
+> Las Directrices PerúCRIS v1.1 (XML oficial) documentan `setSpec` canónicos con prefijo `perucris_`: `perucris_persons`, `perucris_orgunits`, `perucris_publications`, `perucris_projects`, `perucris_fundings`, `perucris_equipments`, `perucris_patents` y `perucris_products`.
+> Los nombres cortos (`persons`, `orgunits`, `publications`, etc.) corresponden a la Guía JSON 2026 y a adaptaciones de implementación.
+> Si el objetivo es conformidad estricta con la fuente XML oficial, los `setSpec` canónicos son los del perfil `perucris_*`.
 
 ### Tipos de cosecha
 
@@ -93,6 +116,10 @@
 | **Completa** | Primera carga / sin checkpoint | `?verb=ListRecords&metadataPrefix=perucris-cerif&set=projects` |
 | **Incremental** | Solo nuevos/modificados | `?verb=ListRecords&metadataPrefix=perucris-cerif&set=projects&from=2026-02-25T00:00:00Z&until=2026-03-05T23:59:59Z` |
 | **Paginada** | Cuando server devuelve token | `?verb=ListRecords&resumptionToken=eyJwYWdlIjoyfQ==` |
+
+> ⚠️ **Nota técnica:**
+> Los requests mostrados en esta subsección conservan `perucris-cerif` para seguir la Guía JSON 2026.
+> Si la interoperabilidad se valida estrictamente contra las Directrices XML v1.1, el valor canónico de `metadataPrefix` es `cerif_perucris`.
 
 ### Regla del `resumptionToken`
 
@@ -158,6 +185,14 @@
 | — | `keywords` | Palabras clave sobre áreas de investigación de la persona. | Array `[{ "value": "..." }]` | O | Repetible |
 | — | `lastModified` | Fecha y hora de última modificación. Requerido para cosecha incremental. | ISO 8601 `AAAA-MM-DDTHH:MM:SSZ` | M | No repetible |
 
+> ⚠️ **Nota técnica:**
+> En el XML oficial `Gender` figura como obligatorio, pero la propia directriz indica que, si no se puede determinar con fuente confiable, no se debe inventar un valor distinto de `m` o `f`.
+> En JSON se recomienda omitir el campo o dejarlo semánticamente vacío antes que forzar un literal artificial.
+
+> ⚠️ **Nota técnica:**
+> En XML oficial `Person` combina un `Identifier` para DNI con elementos dedicados como `ORCID`, `ScopusAuthorID`, `AlternativeScopusAuthorID` y `ResearcherID`.
+> El arreglo `identifiers[]` usado aquí es una normalización JSON de conveniencia; no debe ocultar la cardinalidad ni la tipificación real del XML.
+
 **Salida JSON completa:**
 
 ```json
@@ -197,7 +232,7 @@
 ### 5.2 OrgUnit — Unidad Organizativa
 
 **Definición:** Institución o unidad organizativa dedicada a actividades de CTI.
-**CERIF:** `https://w3id.org/cerif/model#OrgUnit` | **Set:** `orgunits`
+**CERIF:** `https://w3id.org/cerif/model#OrganisationUnit` | **Set:** `orgunits`
 
 | ID | Campo JSON | Descripción | Formato / Valores | Persist. | Ocurrencia |
 |----|-----------|-------------|-------------------|----------|------------|
@@ -213,13 +248,13 @@
 | 7.2.3.4.6 | `address.countryCode` | País. | ISO 3166 — 2 caracteres: `"PE"` | O | No repetible |
 | 7.2.3.5 | `ubiGeo` | Código de ubicación geográfica INEI. Aplica para instituciones peruanas. | Código UbiGeo, ej. `"150101"` (Lima) | MA | No repetible |
 | 7.2.3.6 | `identifiers` (RUC) | RUC asignado por SUNAT. Para instituciones peruanas o extranjeras con representación en Perú. 11 dígitos. | Scheme: `https://purl.org/pe-repo/concytec/terminos#ruc` | MA | No repetible |
-| 7.2.3.7 | `identifiers` (ROR) | Identificador abierto y persistente para organizaciones de investigación asignado por ROR. | Scheme: `https://ror.org` — URL completa | MA | No repetible |
-| 7.2.3.8 | `identifiers` (ISNI) | Número estándar internacional para actores en trabajos creativos. 16 dígitos. | Scheme: `https://isni.org` | MA | No repetible |
-| 7.2.3.9 | `identifiers` (Scopus) | Código de identificación en Scopus (Elsevier). | Scheme: `https://www.scopus.com` | MA | No repetible |
+| 7.2.3.7 | `identifiers` (ROR) | Identificador abierto y persistente para organizaciones de investigación asignado por ROR. | Scheme: `https://w3id.org/cerif/vocab/IdentifierTypes#RORID` | MA | No repetible |
+| 7.2.3.8 | `identifiers` (ISNI) | Número estándar internacional para actores en trabajos creativos. 16 dígitos. | Scheme: `https://w3id.org/cerif/vocab/IdentifierTypes#ISNI` | MA | No repetible |
+| 7.2.3.9 | `identifiers` (Scopus) | Código de identificación en Scopus (Elsevier). | Scheme: `https://w3id.org/cerif/vocab/IdentifierTypes#ScopusAffiliationID` | MA | No repetible |
 | 7.2.3.10 | `identifiers` (GRID) | Identificador GRID de la organización. | Scheme: `https://www.grid.ac` | O | No repetible |
 | 7.2.3.11 | `identifiers` (CrossRef) | Identificador para instituciones financiadoras en CrossRef Funder Registry. | URL DOI | O | No repetible |
 | 7.2.3.12 | `sectorInstitucional` | Sector institucional según Manual de Frascati (OCDE). Clasifica en uno de los 5 grandes sectores. | URI vocabulario CONCYTEC | MA | No repetible |
-| 7.2.3.13 | `type` | Tipo de organización según vocabulario CONCYTEC. | URI: `https://purl.org/pe-repo/concytec/tipoOrganizacion` | M | No repetible |
+| 7.2.3.13 | `type` | Tipo de organización en la adaptación JSON de esta guía. En el XML canónico esto corresponde a `organizationType`. | Texto controlado: `Institución principal` o `Dependencia` | M | No repetible |
 | 7.2.3.14 | `partOf` | Unidad organizativa padre en la jerarquía. Permite construir árbol UNMSM > Facultad > Instituto > Grupo. La raíz NO lleva este campo. | Objeto `{ "orgUnit": { "id": "OrgUnits/..." } }` | MA | Repetible |
 | 7.2.3.15 | `dependencyType` | Tipo de dependencia respecto a la unidad padre. | URI vocabulario CONCYTEC | MA | No repetible |
 | 7.2.3.16 | `higherEducationType` | Tipo de institución de enseñanza superior según SUNEDU. | URI vocabulario SUNEDU-CONCYTEC | MA | No repetible |
@@ -231,6 +266,16 @@
 | 7.2.3.23 | `description` | Descripción general de la unidad. | Array `[{ "lang": "es", "value": "..." }]` | R | Repetible |
 | — | `classifications` | Clasificaciones adicionales con vocabularios controlados. | Array `[{ "scheme": "URI", "value": "valor" }]` | O | Repetible |
 | — | `lastModified` | Fecha de última modificación. | ISO 8601 | M | No repetible |
+
+> ⚠️ **Nota técnica:**
+> En el XML oficial `organizationType` y `Type` no son equivalentes.
+> `organizationType` es texto controlado y solo admite `Institución principal` o `Dependencia`.
+> Los demás `Type` de OrgUnit corresponden a clasificaciones URI distintas (`sectorInstitucional`, `dependencyType`, `higherEducationType`, `nature`, `ciiu`, etc.).
+> El campo JSON `type` de esta guía es una adaptación y no debe mezclar ambos niveles semánticos sin documentarlo explícitamente.
+
+> ⚠️ **Nota técnica:**
+> Para interoperabilidad fiel al XML, `UbiGeo` se modela como clasificación con `scheme="https://purl.org/pe-repo/inei/ubigeo"` y valor URI.
+> El uso de códigos simples como `150101` o `0101` es una simplificación local y no sustituye la referencia canónica del XML.
 
 **Salida JSON — Jerarquía completa:**
 
@@ -245,9 +290,9 @@
   "type": "Institución principal",
   "identifiers": [
     { "scheme": "https://purl.org/pe-repo/concytec/terminos#ruc", "value": "20148092282" },
-    { "scheme": "https://ror.org", "value": "https://ror.org/040zs9j54" },
+    { "scheme": "https://w3id.org/cerif/vocab/IdentifierTypes#RORID", "value": "040zs9j54" },
     { "scheme": "https://www.grid.ac", "value": "grid.11301.36" },
-    { "scheme": "https://isni.org", "value": "0000000121662407" }
+    { "scheme": "https://w3id.org/cerif/vocab/IdentifierTypes#ISNI", "value": "0000000121662407" }
   ],
   "countryCode": "PE",
   "ubiGeo": "150101",
@@ -269,6 +314,10 @@
   "lastModified": "2026-02-20T12:00:00Z"
 }
 ```
+
+> ⚠️ **Nota técnica:**
+> El bloque `classifications` mostrado arriba es complementario y no sustituye el `organizationType` textual del XML oficial.
+> En v1.1, `organizationType` mantiene el valor controlado en texto (`Institución principal` / `Dependencia`); no es una clasificación CERIF autónoma.
 
 ```json
 {
@@ -300,6 +349,10 @@
 }
 ```
 
+> ⚠️ **Nota técnica:**
+> Los valores abreviados `Facultad`, `Instituto` y `Grupo de investigación` en `type` funcionan aquí como rótulos jerárquicos legibles.
+> En el XML oficial deben distinguirse el `organizationType` (`Dependencia`) y, cuando corresponda, las clasificaciones formales como `dependencyType`, `sectorInstitucional`, `higherEducationType`, `nature` o `ciiu`.
+
 ---
 
 ### 5.3 Funding — Financiamiento
@@ -314,7 +367,7 @@
 | 7.2.1.3 | `identifiers` (AwardNumber) | Código público del financiamiento tal como figura en documentos oficiales. Si no hay identificador persistente, usar `AwardNumber`. | Scheme: `https://w3id.org/cerif/vocab/IdentifierTypes#AwardNumber` | M | No repetible |
 | 7.2.1.4 | `title` | Nombre oficial del financiamiento. Repetible para distintos idiomas. | Array `[{ "lang": "es", "value": "..." }]` | M | Repetible |
 | 7.2.1.5 | `acronym` | Sigla o acrónimo del financiamiento. | Texto libre | O | No repetible |
-| 7.2.1.6 | `fundedBy` | Entidad subvencionadora. Embebe OrgUnit con al menos `id` y `name`. | Objeto `{ "orgUnit": { "id": "...", "name": "..." } }` | M | No repetible |
+| 7.2.1.6 | `fundedBy` | Entidad subvencionadora. Embebe OrgUnit con al menos `id` y `name`. | Objeto o array de objetos `{ "orgUnit": { "id": "...", "name": "..." } }` | M | Repetible |
 | 7.2.1.7 | `partOf` | Financiamiento de nivel superior del que forma parte (ej. convocatoria dentro de un programa). | Objeto `{ "id": "Fundings/..." }` | MA | No repetible |
 | 7.2.1.8 | `startDate` | Fecha de inicio del periodo del financiamiento. | ISO 8601: `AAAA-MM-DD`, `AAAA-MM` o `AAAA` | R | No repetible |
 | 7.2.1.8 | `endDate` | Fecha de fin del periodo del financiamiento. | ISO 8601: `AAAA-MM-DD`, `AAAA-MM` o `AAAA` | R | No repetible |
@@ -328,6 +381,15 @@
 | — | `relatedProjects` | Proyectos financiados por este financiamiento. | Array: `["Projects/..."]` | O | Repetible |
 | — | `url` | URL del financiamiento en el sistema de origen. | URL completa | O | No repetible |
 | — | `lastModified` | Fecha de última modificación. | ISO 8601 | M | No repetible |
+
+> ⚠️ **Nota técnica:**
+> En el XML oficial `Funder` es repetible.
+> El objeto único `fundedBy` mostrado en esta guía es válido solo cuando existe una única entidad subvencionadora.
+> Si hay más de un financiador, no se debe aplanar la relación: la estructura canónica repite el bloque de funder.
+
+> ⚠️ **Nota técnica:**
+> La repetibilidad recae en `OAMandate` como elemento, no en el atributo `uri` aislado.
+> Si existen varios mandatos o varios documentos normativos, el modelo XML canónico repite el bloque de mandato; `uri[]` dentro de un único objeto es solo una adaptación JSON y no debe confundirse con la cardinalidad XML original.
 
 **Vocabulario `type`:**
 
@@ -406,12 +468,28 @@
 | 7.2.2.15 | `geoLocations` | Ámbito geográfico de estudio. Puede ser punto (`pointLatitude`/`pointLongitude`), caja o lugar nombrado (`geoLocationPlace`). | Array de objetos geoLocation | MA | Repetible |
 | 7.2.2.16 | `keywords` | Palabras clave. Repetible para distintos idiomas. | Array `[{ "lang": "es", "value": "..." }]` | R | Repetible |
 | 7.2.2.17 | `abstract` | Resumen del proyecto. Repetible para distintos idiomas. | Array `[{ "lang": "es", "value": "..." }]` | R | Repetible |
-| 7.2.2.18 | `status` | Estado del proyecto según vocabulario CONCYTEC. | `"completed"`, `"ongoing"`, `"cancelled"`, etc. | R | No repetible |
+| 7.2.2.18 | `status` | Estado del proyecto según vocabulario CONCYTEC. | URI canónica: `https://purl.org/pe-repo/concytec/estadoProyecto#activo`, `#suspendido` o `#concluido` | R | No repetible |
 | 7.2.2.19 | `uses` | Equipamientos utilizados en el proyecto. | Array `["Equipments/..."]` | R | Repetible |
 | 7.2.2.20 | `url` | URL del proyecto en el sistema de origen. | URL completa | R | Repetible |
-| 7.2.2.21 | `oaMandate` | Mandato de Acceso Abierto del proyecto. | Objeto con `mandate` (boolean) y `uri` | R | Repetible |
+| 7.2.2.21 | `oaMandate` | Mandato de Acceso Abierto del proyecto. | Objeto con booleano canónico `mandated` y `uri` | R | Repetible |
 | — | `outputs` | Salidas vinculadas: publicaciones, patentes, productos. | Objeto `{ "publications": [], "patents": [], "products": [] }` | O | No repetible |
 | — | `lastModified` | Fecha de última modificación. | ISO 8601 | M | No repetible |
+
+> ⚠️ **Nota técnica:**
+> El XML oficial define `Status` con el vocabulario URI `https://purl.org/pe-repo/concytec/estadoProyecto`.
+> Literales libres como `completed`, `ongoing` o `cancelled` no son canónicos para interoperabilidad PerúCRIS.
+
+> ⚠️ **Nota técnica:**
+> En el XML oficial `Uses` embebe objetos `Equipment`; un arreglo simple de IDs es una simplificación local.
+> Si se requiere fidelidad estructural XML → JSON, cada relación debería conservar al menos el objeto embebido con `id` y `name`.
+
+> ⚠️ **Nota técnica:**
+> En `Project`, la documentación textual puede alternar `mandate` y `mandated`, pero el patrón canónico heredado del XML oficial mantiene `mandated` como atributo booleano dentro de `OAMandate`.
+> Si se normaliza a JSON, conviene no divergir entre `Funding` y `Project` para no perder trazabilidad semántica.
+
+> ⚠️ **Nota técnica:**
+> `outputs` no es un campo definido por el perfil XML v1.1.
+> Debe entenderse como una vista inversa o agregado local; para intercambio canónico prevalecen las relaciones explícitas desde `Publication`, `Patent` o `Product` mediante `OriginatesFrom`.
 
 **Vocabulario `type` OCDE:**
 
@@ -461,7 +539,7 @@
   ],
   "startDate": "2017-01-01",
   "endDate": "2020-10-31",
-  "status": "completed",
+  "status": "https://purl.org/pe-repo/concytec/estadoProyecto#concluido",
   "abstract": [{ "lang": "es", "value": "Proyecto de epidemiología veterinaria en camélidos sudamericanos." }],
   "keywords": [
     { "lang": "es", "value": "Vicuñas" },
@@ -521,6 +599,11 @@
 | — | `url` | URL del registro en el sistema de origen. | URL completa | O | No repetible |
 | — | `lastModified` | Fecha de última modificación. | ISO 8601 | M | No repetible |
 
+> ⚠️ **Nota técnica:**
+> `generatedOutputs` no existe como campo canónico en las Directrices XML v1.1.
+> La relación interoperable oficial se expresa desde `Product` mediante `GeneratedBy` hacia `Equipment`.
+> Este campo debe entenderse solo como vista inversa o conveniencia local.
+
 **Salida JSON completa:**
 
 ```json
@@ -531,7 +614,7 @@
     { "scheme": "https://w3id.org/cerif/vocab/IdentifierTypes#CRISID", "value": "F.5618" },
     { "scheme": "https://w3id.org/cerif/vocab/IdentifierTypes#SerialNumber", "value": "SN-CHROM-000123" }
   ],
-  "type": "http://purl.org/coar/resource_type/c_2f33",
+  "type": "https://purl.org/pe-repo/concytec/equipamiento#cromatografos",
   "description": [
     { "lang": "es", "value": "Marca: VARIAN. Serie: GC0806B023. Modelo: 450GC. Horno para 3 columnas simultáneas, temperatura hasta 450ºC." }
   ],
@@ -607,6 +690,18 @@
 | 7.2.6.36.1.4 | ↳ `qualification.grantor` | Institución otorgante del grado con jerarquía `partOf`. | Objeto `{ "orgUnit": { "id": "...", "partOf": { "orgUnit": {...} } } }` | O | No repetible |
 | 7.2.6.36.1.5 | ↳ `qualification.jurors` | Jurados de la tesis. Embeben objetos Person con al menos `id`, `personName` e `identifiers`. | Array de objetos `{ "person": { ... } }` | R | Repetible |
 | — | `lastModified` | Fecha de última modificación. | ISO 8601 | M | No repetible |
+
+> ⚠️ **Nota técnica:**
+> En el XML oficial cada identificador de publicación (`Handle`, `DOI`, `ISBN`, `ISSN`, `PMCID`, `ISI-Number`, `SCP-Number`, `URL`) es un elemento propio.
+> El arreglo `identifiers[]` con `type` es una normalización JSON de la Guía 2026; si se usa, no debe mezclarse con `scheme` dentro de la misma colección sin una regla explícita de serialización.
+
+> ⚠️ **Nota técnica:**
+> `DOI` en `Publication` debe transportarse como token DOI (`10....`), sin anteponer `https://doi.org/`.
+> Para acceso resoluble, utilice `URL` o resuelva el DOI a nivel de aplicación, pero no cambie el valor semántico del campo DOI.
+
+> ⚠️ **Nota técnica:**
+> Cuando `access` sea `http://purl.org/coar/access_right/c_f1cf` (embargado), el XML oficial exige además el atributo `endDate`.
+> Si no existe embargo, no debe inventarse ese atributo.
 
 **Salida JSON completa:**
 
@@ -712,7 +807,7 @@
               "id": "OrgUnits/1",
               "acronym": "UNMSM",
               "name": [{ "value": "Universidad Nacional Mayor de San Marcos" }],
-              "identifiers": [{ "scheme": "ruc", "value": "20148092282" }]
+              "identifiers": [{ "scheme": "https://purl.org/pe-repo/concytec/terminos#ruc", "value": "20148092282" }]
             }
           }
         }
@@ -722,14 +817,14 @@
           "person": {
             "id": "Persons/288725",
             "personName": { "fullName": "Miriam Josefina Mariátegui Suarez" },
-            "identifiers": [{ "scheme": "dni", "value": "10274587" }]
+            "identifiers": [{ "scheme": "http://purl.org/pe-repo/concytec/terminos#dni", "value": "10274587" }]
           }
         },
         {
           "person": {
             "id": "Persons/288726",
             "personName": { "fullName": "Rubén Jesús Lozada Martin" },
-            "identifiers": [{ "scheme": "dni", "value": "08974125" }]
+            "identifiers": [{ "scheme": "http://purl.org/pe-repo/concytec/terminos#dni", "value": "08974125" }]
           }
         }
       ]
@@ -768,6 +863,10 @@
 | 7.2.7.18 | `predecessor` | Patente predecesora (para continuaciones o divisiones). | Array `["Patents/..."]` | O | Repetible |
 | — | `lastModified` | Fecha de última modificación. | ISO 8601 | M | No repetible |
 
+> ⚠️ **Nota técnica:**
+> En la exportación fiel al XML, la clasificación CIP/IPC es la obligatoria para `Patent`.
+> Las clasificaciones OCDE son complementarias y no sustituyen la CIP, aunque ambas puedan convivir en una misma serialización JSON.
+
 **Salida JSON completa:**
 
 ```json
@@ -787,14 +886,14 @@
       "person": {
         "id": "Persons/2016875",
         "name": "Lizeth María Zárate Aguilar",
-        "identifiers": [{ "scheme": "dni", "value": "07928457" }]
+        "identifiers": [{ "scheme": "http://purl.org/pe-repo/concytec/terminos#dni", "value": "07928457" }]
       }
     },
     {
       "person": {
         "id": "Persons/2875998",
         "name": "Marco Antonio Chaco Gómez",
-        "identifiers": [{ "scheme": "orcid", "value": "https://orcid.org/0000-0001-7291-6401" }]
+        "identifiers": [{ "scheme": "https://orcid.org", "value": "https://orcid.org/0000-0001-7291-6401" }]
       }
     }
   ],
@@ -803,7 +902,7 @@
       "orgUnit": {
         "id": "OrgUnits/385244",
         "name": "Industrias Arguelles y Servicios Generales",
-        "identifiers": [{ "scheme": "ruc", "value": "20173136499" }]
+        "identifiers": [{ "scheme": "https://purl.org/pe-repo/concytec/terminos#ruc", "value": "20173136499" }]
       }
     }
   ],
@@ -845,7 +944,7 @@
 | 7.2.8.3 | `language` | Idioma(s) del producto. | Array ISO 639-1: `["es", "en"]` | O | Repetible |
 | 7.2.8.5 | `versionInfo` | Versión del producto (especialmente para software y datasets). | Array de strings: `["1.0.0"]` | O | Repetible |
 | 7.2.8.6 | `ark` | Identificador ARK (Archival Resource Key) del producto. | URL ARK | O | No repetible |
-| 7.2.8.7 | `doi` | Digital Object Identifier. URL completa. | URL DOI | O | No repetible |
+| 7.2.8.7 | `doi` | Digital Object Identifier. Conservar el DOI como identificador, sin convertirlo en URL resoluble. | Token DOI, ej. `10.1234/dataset.vicunas.2023` | O | No repetible |
 | 7.2.8.8 | `handle` | Identificador Handle persistente. | URL Handle | O | No repetible |
 | 7.2.8.9 | `url` | URL de acceso al producto en el repositorio. | URL completa | O | No repetible |
 | 7.2.8.10 | `creators` | Creadores del producto con orden. Embeben objetos Person. | Array `[{ "person": { "id": "...", "name": "..." }, "order": 1 }]` | O | Repetible |
@@ -860,6 +959,13 @@
 | 7.2.8.19 | `generatedBy` | Equipamientos usados para generar el producto. | Array `["Equipments/..."]` | O | Repetible |
 | — | `lastModified` | Fecha de última modificación. | ISO 8601 | M | No repetible |
 
+> ⚠️ **Nota técnica:**
+> `generatedBy` sí está definido en el XML oficial como `Product/GeneratedBy`; no debe eliminarse.
+> Lo no canónico en v1.1 es el campo inverso `Equipment.generatedOutputs`, que solo sirve como vista derivada/local.
+
+> ⚠️ **Nota técnica:**
+> `DOI` en `Product` sigue el mismo criterio que `DOI` en `Publication`: el valor canónico es el identificador DOI, no el resolver `https://doi.org/...`.
+
 **Salida JSON completa:**
 
 ```json
@@ -873,7 +979,7 @@
   ],
   "language": ["es", "en"],
   "versionInfo": ["1.0.0"],
-  "doi": "https://doi.org/10.1234/dataset.vicunas.2023",
+  "doi": "10.1234/dataset.vicunas.2023",
   "url": "https://datos.unmsm.edu.pe/dataset/vicunas2023",
   "creators": [
     { "person": { "id": "Persons/28521427", "name": "Paolo Edgar Cabrera Sánchez" }, "order": 1 }
@@ -898,6 +1004,14 @@
 ---
 
 ## 6. Verbos OAI-PMH y respuestas JSON
+
+> ⚠️ **Nota técnica:**
+> Los bloques siguientes son proyecciones JSON de envelopes OAI-PMH XML; no sustituyen el wire format XML del protocolo.
+> El sobre OAI-PMH debe conservar consistentemente `@xmlns`, `@xmlns:xsi`, `@xsi:schemaLocation`, `responseDate` y el eco del `request`.
+
+> ⚠️ **Nota técnica:**
+> En conformidad estricta con las Directrices XML v1.1, sustituya `perucris-cerif` por `cerif_perucris` y `https://purl.org/pe-repo/perucris/cerif` por `https://purl.org/pe-repo/cerif-profile/1.0/`.
+> Los valores usados en varios ejemplos de esta sección siguen la Guía JSON 2026 y deben entenderse como adaptación, no como reemplazo del XML canónico.
 
 ### Identify
 
@@ -927,6 +1041,9 @@
 ```json
 {
   "OAI-PMH": {
+    "@xmlns": "http://www.openarchives.org/OAI/2.0/",
+    "@xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+    "@xsi:schemaLocation": "http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd",
     "responseDate": "2026-03-05T15:20:05Z",
     "request": { "@verb": "ListMetadataFormats", "#text": "https://cris.institucion.edu.pe/oai" },
     "ListMetadataFormats": {
@@ -944,6 +1061,9 @@
 ```json
 {
   "OAI-PMH": {
+    "@xmlns": "http://www.openarchives.org/OAI/2.0/",
+    "@xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+    "@xsi:schemaLocation": "http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd",
     "responseDate": "2026-03-05T15:20:10Z",
     "request": { "@verb": "ListSets", "#text": "https://cris.institucion.edu.pe/oai" },
     "ListSets": {
@@ -954,7 +1074,8 @@
         { "setSpec": "projects",     "setName": "Proyectos" },
         { "setSpec": "fundings",     "setName": "Financiamientos" },
         { "setSpec": "equipments",   "setName": "Equipamientos" },
-        { "setSpec": "patents",      "setName": "Patentes" }
+        { "setSpec": "patents",      "setName": "Patentes" },
+        { "setSpec": "products",     "setName": "Productos de investigación" }
       ]
     }
   }
@@ -966,6 +1087,9 @@
 ```json
 {
   "OAI-PMH": {
+    "@xmlns": "http://www.openarchives.org/OAI/2.0/",
+    "@xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+    "@xsi:schemaLocation": "http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd",
     "responseDate": "2026-03-05T15:21:20Z",
     "request": { "@verb": "ListIdentifiers", "@metadataPrefix": "perucris-cerif", "@set": "publications", "#text": "https://cris.institucion.edu.pe/oai" },
     "ListIdentifiers": {
@@ -984,6 +1108,9 @@
 ```json
 {
   "OAI-PMH": {
+    "@xmlns": "http://www.openarchives.org/OAI/2.0/",
+    "@xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+    "@xsi:schemaLocation": "http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd",
     "responseDate": "2026-03-05T15:21:00Z",
     "request": { "@verb": "ListRecords", "@metadataPrefix": "perucris-cerif", "@set": "publications", "#text": "https://cris.institucion.edu.pe/oai" },
     "ListRecords": {
@@ -1024,6 +1151,9 @@
 ```json
 {
   "OAI-PMH": {
+    "@xmlns": "http://www.openarchives.org/OAI/2.0/",
+    "@xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+    "@xsi:schemaLocation": "http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd",
     "responseDate": "2026-03-05T15:21:30Z",
     "request": { "@verb": "GetRecord", "@metadataPrefix": "perucris-cerif", "@identifier": "oai:cris.institucion.edu.pe:Publications/894518", "#text": "https://cris.institucion.edu.pe/oai" },
     "GetRecord": {
@@ -1050,6 +1180,9 @@
 ```json
 {
   "OAI-PMH": {
+    "@xmlns": "http://www.openarchives.org/OAI/2.0/",
+    "@xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+    "@xsi:schemaLocation": "http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd",
     "responseDate": "2026-03-05T15:21:40Z",
     "request": { "@verb": "ListRecords", "@metadataPrefix": "perucris-cerif", "@set": "unknown", "#text": "https://cris.institucion.edu.pe/oai" },
     "error": { "@code": "noSetHierarchy", "#text": "El set solicitado no existe o no está habilitado." }
@@ -1082,16 +1215,25 @@
 | Person | ResearcherID | `https://w3id.org/cerif/vocab/IdentifierTypes#ResearcherID` |
 | Person | Scopus Author ID | `https://w3id.org/cerif/vocab/IdentifierTypes#ScopusAuthorID` |
 | OrgUnit | RUC | `https://purl.org/pe-repo/concytec/terminos#ruc` |
-| OrgUnit | ROR | `https://ror.org` |
-| OrgUnit | GRID | `https://www.grid.ac` |
-| OrgUnit | ISNI | `https://isni.org` |
-| OrgUnit | Tipo org. | `https://purl.org/pe-repo/concytec/tipoOrganizacion` |
+| OrgUnit | ROR | `https://w3id.org/cerif/vocab/IdentifierTypes#RORID` |
+| OrgUnit | GRID | `https://www.grid.ac` *(identificador suplementario/local; no forma parte del set canónico v1.1)* |
+| OrgUnit | ISNI | `https://w3id.org/cerif/vocab/IdentifierTypes#ISNI` |
+| OrgUnit | Scopus Affiliation ID | `https://w3id.org/cerif/vocab/IdentifierTypes#ScopusAffiliationID` |
+| OrgUnit | organizationType | *(sin URI; valores canónicos: `Institución principal` / `Dependencia`)* |
 | Funding | Award Number | `https://w3id.org/cerif/vocab/IdentifierTypes#AwardNumber` |
 | Funding | FundRef ID | `https://w3id.org/cerif/vocab/IdentifierTypes#FundRefID` |
 | Project | Código proyecto | `https://w3id.org/cerif/vocab/IdentifierTypes#ProjectReference` |
 | Equipment | ID institucional | `https://w3id.org/cerif/vocab/IdentifierTypes#CRISID` |
 | Equipment | Nro. serie | `https://w3id.org/cerif/vocab/IdentifierTypes#SerialNumber` |
 | Patent | CIP (IPC) | `http://data.epo.org/linked-data/def/ipc/` |
+
+> ⚠️ **Nota técnica:**
+> En OrgUnit, los resolvers públicos (`https://ror.org`, `https://isni.org`) no son el `scheme` canónico del XML oficial.
+> El XML PerúCRIS v1.1 tipa esos identificadores con `cfFedId/cfFedIdType` de CERIF (`#RORID`, `#ISNI`, `#ScopusAffiliationID`) y deja el valor del identificador separado del resolver.
+
+> ⚠️ **Nota técnica:**
+> En `Publication` y `Product`, `DOI` debe conservarse como DOI token (`10....`), mientras que `FundRefID` / Crossref Funder Registry puede aparecer en ejemplos oficiales con el resolver legado `http://dx.doi.org/10.13039/...`.
+> No conviene mezclar ambos formatos sin documentar si el campo guarda el identificador o la URL resoluble.
 
 ### Vocabularios de clasificación comunes
 
@@ -1114,10 +1256,14 @@
 
 | Parámetro | Valor |
 |-----------|-------|
-| `metadataPrefix` | `perucris-cerif` |
-| `metadataNamespace` | `https://purl.org/pe-repo/perucris/cerif` |
-| `schema XSD` | `https://purl.org/pe-repo/perucris/cerif.xsd` |
+| `metadataPrefix` | XML v1.1 canónico: `cerif_perucris` · Guía JSON 2026: `perucris-cerif` |
+| `metadataNamespace` | XML v1.1 canónico: `https://purl.org/pe-repo/cerif-profile/1.0/` · Guía JSON 2026: `https://purl.org/pe-repo/perucris/cerif` |
+| `schema XSD` | XML v1.1 canónico: `https://purl.org/pe-repo/cerif-profile/1.0/perucris-cerif-profile.xsd` · Guía JSON 2026: `https://purl.org/pe-repo/perucris/cerif.xsd` |
 | OAI-PMH base | `http://www.openarchives.org/OAI/2.0/` |
+
+> ⚠️ **Nota técnica:**
+> La tabla anterior distingue explícitamente entre el perfil XML oficial y la guía JSON.
+> Cuando deba elegirse uno por interoperabilidad formal con PerúCRIS, prevalece siempre el perfil XML v1.1.
 
 ### Formato de identificadores OAI
 
@@ -1134,7 +1280,12 @@ oai:rais.unmsm.edu.pe:OrgUnits/F10
 oai:rais.unmsm.edu.pe:Fundings/187597
 oai:rais.unmsm.edu.pe:Patents/284788
 oai:rais.unmsm.edu.pe:Equipments/82394874
+oai:rais.unmsm.edu.pe:Products/DS-2023-001
 ```
+
+> ⚠️ **Nota técnica:**
+> En el identificador OAI, el segmento `{NombreEntidad}` debe conservar la colección canónica y es sensible a mayúsculas/minúsculas: `Persons`, `OrgUnits`, `Publications`, `Projects`, `Fundings`, `Equipments`, `Patents` y `Products`.
+> La forma general sigue siendo `oai:{dominio}:{EntidadPlural}/{InternalIdentifier}`.
 
 ---
 
