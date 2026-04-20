@@ -1,4 +1,4 @@
-# API PerúCRIS — Guía Completa para Implementación
+# API PerúCRIS — Guía completa de implementación
 > **Fuentes:** Directrices #PerúCRIS v1.1 (CONCYTEC, Junio 2024) + Guía de APIs JSON (CONCYTEC, Marzo 2026)
 > **Protocolo:** OAI-PMH 2.0 | **Formato:** CERIF JSON | **Namespace:** `https://purl.org/pe-repo/perucris/cerif`
 > **metadataPrefix (JSON guía):** `perucris-cerif`
@@ -75,7 +75,7 @@
 |-------|--------|-------------|
 | **Obligatorio** | `M` | Siempre presente. No se permite vacío. |
 | **Obligatorio si aplica** | `MA` | Presente cuando se cumplen condiciones previas definidas. |
-| **Recomendado** | `R` | No obligatorio pero exhortado para calidad del dato. |
+| **Recomendado** | `R` | No obligatorio, pero recomendado para mejorar la calidad del dato. |
 | **Opcional** | `O` | Puede estar o no. Información complementaria. |
 
 ### Ocurrencia → representación JSON
@@ -102,7 +102,7 @@
 | `fundings` | Financiamientos |
 | `equipments` | Equipamientos |
 | `patents` | Patentes |
-| `products` | Productos de investigación *(la guía JSON abreviada suele omitirlo, pero el perfil XML oficial sí lo contempla)* |
+| `products` | Productos de investigación *(entidad oficial del perfil XML v1.1 y parte obligatoria del modelo conceptual, aunque una implementación concreta aún no la exponga en backend)* |
 
 > ⚠️ **Nota técnica:**
 > Las Directrices PerúCRIS v1.1 (XML oficial) documentan `setSpec` canónicos con prefijo `perucris_`: `perucris_persons`, `perucris_orgunits`, `perucris_publications`, `perucris_projects`, `perucris_fundings`, `perucris_equipments`, `perucris_patents` y `perucris_products`.
@@ -125,7 +125,9 @@
 
 - `#text` no vacío → hay más páginas → repetir solo con token
 - `#text` vacío o ausente → fin de cosecha
-- Al continuar con token **NO agregar** `from`/`until`
+- Al continuar con token **NO agregar** `metadataPrefix`, `set`, `from` ni `until`
+
+> Si la continuación mezcla `resumptionToken` con parámetros adicionales, la implementación debe tratarlo como combinación inválida de argumentos.
 
 > **Convención JSON:** atributos XML → prefijo `@` | texto del nodo → `#text`
 
@@ -151,7 +153,7 @@
 ```
 
 **Reglas obligatorias:**
-- `id` siempre con prefijo de entidad: `Persons/…`, `OrgUnits/…`, `Projects/…`, `Publications/…`, `Fundings/…`, `Patents/…`, `Equipments/…`
+- `id` siempre con prefijo de entidad: `Persons/…`, `OrgUnits/…`, `Projects/…`, `Publications/…`, `Fundings/…`, `Patents/…`, `Equipments/…`, `Products/…`
 - Campos multilenguaje: siempre array `[{ "lang": "es", "value": "..." }]`
 - `lastModified` en ISO 8601 — requerido para cosecha incremental
 - No usar elementos o vocabularios distintos a los definidos en el perfil
@@ -378,7 +380,7 @@
 | 7.2.1.13 | `oaMandate` | Mandato de Acceso Abierto. Indica si existe obligación de publicar en acceso abierto. | Objeto con `mandated` y `uri` | R | Repetible |
 | 7.2.1.13.1 | `oaMandate.mandated` | ¿Tiene mandato de acceso abierto? | `true` o `false` | M | No repetible |
 | 7.2.1.13.2 | `oaMandate.uri` | URL del documento que establece el mandato. | URL | O | Repetible |
-| — | `relatedProjects` | Proyectos financiados por este financiamiento. | Array: `["Projects/..."]` | O | Repetible |
+| — | `relatedProjects` *(extensión local / no estándar)* | Vista inversa local de proyectos financiados. | Array: `["Projects/..."]` | O | Repetible |
 | — | `url` | URL del financiamiento en el sistema de origen. | URL completa | O | No repetible |
 | — | `lastModified` | Fecha de última modificación. | ISO 8601 | M | No repetible |
 
@@ -390,6 +392,10 @@
 > ⚠️ **Nota técnica:**
 > La repetibilidad recae en `OAMandate` como elemento, no en el atributo `uri` aislado.
 > Si existen varios mandatos o varios documentos normativos, el modelo XML canónico repite el bloque de mandato; `uri[]` dentro de un único objeto es solo una adaptación JSON y no debe confundirse con la cardinalidad XML original.
+
+> ⚠️ **Nota técnica:**
+> `relatedProjects` no forma parte del perfil XML oficial v1.1.
+> Debe entenderse como extensión local o vista inversa de conveniencia; la relación canónica se expresa desde `Project` hacia `Funding` mediante enlaces explícitos.
 
 **Vocabulario `type`:**
 
@@ -472,7 +478,7 @@
 | 7.2.2.19 | `uses` | Equipamientos utilizados en el proyecto. | Array `["Equipments/..."]` | R | Repetible |
 | 7.2.2.20 | `url` | URL del proyecto en el sistema de origen. | URL completa | R | Repetible |
 | 7.2.2.21 | `oaMandate` | Mandato de Acceso Abierto del proyecto. | Objeto con booleano canónico `mandated` y `uri` | R | Repetible |
-| — | `outputs` | Salidas vinculadas: publicaciones, patentes, productos. | Objeto `{ "publications": [], "patents": [], "products": [] }` | O | No repetible |
+| — | `outputs` *(extensión local / no estándar)* | Vista inversa local de salidas vinculadas: publicaciones, patentes y productos. | Objeto `{ "publications": [], "patents": [], "products": [] }` | O | No repetible |
 | — | `lastModified` | Fecha de última modificación. | ISO 8601 | M | No repetible |
 
 > ⚠️ **Nota técnica:**
@@ -489,7 +495,7 @@
 
 > ⚠️ **Nota técnica:**
 > `outputs` no es un campo definido por el perfil XML v1.1.
-> Debe entenderse como una vista inversa o agregado local; para intercambio canónico prevalecen las relaciones explícitas desde `Publication`, `Patent` o `Product` mediante `OriginatesFrom`.
+> Debe entenderse como una extensión local o agregado de conveniencia; para intercambio canónico prevalecen las relaciones explícitas desde `Publication`, `Patent` o `Product` mediante `OriginatesFrom`.
 
 **Vocabulario `type` OCDE:**
 
@@ -595,14 +601,14 @@
 | 7.2.5.14 | `acquisitionDate` | Fecha de adquisición del equipo por la institución. | ISO 8601: `AAAA-MM-DD`, `AAAA-MM` o `AAAA` | R | No repetible |
 | 7.2.5.15 | `acquisitionAmount` | Monto de adquisición. Enteros sin decimales ni separadores. Incluir moneda ISO 4217. | Objeto `{ "value": 18000, "currency": "USD" }` | R | No repetible |
 | — | `location` | Ubicación física dentro de la institución. | Objeto `{ "campus": "...", "lab": "..." }` | O | No repetible |
-| — | `generatedOutputs` | Productos generados usando este equipamiento. | Array `["Products/..."]` | O | Repetible |
+| — | `generatedOutputs` *(extensión local / no estándar)* | Vista inversa local de productos generados usando este equipamiento. | Array `["Products/..."]` | O | Repetible |
 | — | `url` | URL del registro en el sistema de origen. | URL completa | O | No repetible |
 | — | `lastModified` | Fecha de última modificación. | ISO 8601 | M | No repetible |
 
 > ⚠️ **Nota técnica:**
 > `generatedOutputs` no existe como campo canónico en las Directrices XML v1.1.
 > La relación interoperable oficial se expresa desde `Product` mediante `GeneratedBy` hacia `Equipment`.
-> Este campo debe entenderse solo como vista inversa o conveniencia local.
+> Este campo debe entenderse solo como extensión local, vista inversa o conveniencia de consulta.
 
 **Salida JSON completa:**
 
@@ -672,7 +678,7 @@
 | 7.2.6.22 | `edition` | Edición (para libros). | Texto, ej. `"2a ed."` | O | No repetible |
 | 7.2.6.23 | `startPage` | Página de inicio del artículo o capítulo. | Número como string, ej. `"285"` | O | No repetible |
 | 7.2.6.24 | `endPage` | Página de fin del artículo o capítulo. | Número como string, ej. `"309"` | O | No repetible |
-| 7.2.6.25 | `language` | Idioma(s) de la publicación. | Array ISO 639-1: `["es", "en"]` | O | Repetible |
+| 7.2.6.25 | `language` | Idioma principal de la publicación. En el XSD oficial `Publication/Language` es singular. | Valor ISO 639-1, ej. `"es"` | O | No repetible |
 | 7.2.6.26 | `license` | Condición de licencia. Puede incluir URI del tipo de licencia y URL de la licencia. | Array con objetos `{ "scheme": "...", "value": "..." }` y/o `{ "url": "..." }` | O | Repetible |
 | 7.2.6.27 | `originatesFrom` | Proyectos y/o financiamientos de los que surge la publicación. | Array con `{ "project": { "id": "..." } }` y/o `{ "funding": { "id": "..." } }` | O | Repetible |
 | 7.2.6.28 | `abstract` | Resumen. Repetible para distintos idiomas. | Array `[{ "lang": "es", "value": "..." }]` | O | Repetible |
@@ -702,6 +708,10 @@
 > ⚠️ **Nota técnica:**
 > Cuando `access` sea `http://purl.org/coar/access_right/c_f1cf` (embargado), el XML oficial exige además el atributo `endDate`.
 > Si no existe embargo, no debe inventarse ese atributo.
+
+> ⚠️ **Nota técnica:**
+> En el XSD oficial v1.1, `Publication/Language` tiene cardinalidad singular (`minOccurs="0"`, sin `maxOccurs="unbounded"`).
+> No debe extrapolarse una regla genérica de `language[]` a todas las entidades del perfil.
 
 **Salida JSON completa:**
 
@@ -762,7 +772,7 @@
   "issue": "2",
   "startPage": "285",
   "endPage": "309",
-  "language": ["es", "en"],
+  "language": "es",
   "license": [
     { "scheme": "https://www.openaire.eu/cerif-profile/vocab/LicenseTypes", "value": "CCAttribution(CCBY)" },
     { "url": "https://creativecommons.org/licenses/by/4.0/" }
@@ -854,7 +864,6 @@
 | 7.2.7.7 | `registrationDate` | Fecha de presentación de la solicitud original. | ISO 8601: `AAAA-MM-DD` | O | No repetible |
 | 7.2.7.8 | `approvalDate` | Fecha de concesión oficial de la patente. | ISO 8601: `AAAA-MM-DD` | O | No repetible |
 | 7.2.7.9 | `countryCode` | País donde fue otorgada la patente. | ISO 3166 — 2 caracteres: `"PE"` | O | No repetible |
-| 7.2.7.10 | `language` | Idioma(s) de la patente. | Array ISO 639-1: `["es"]` | O | Repetible |
 | 7.2.7.11 | `abstract` | Resumen técnico. Repetible para distintos idiomas. | Array `[{ "lang": "es", "value": "..." }]` | R | Repetible |
 | 7.2.7.13 | `keywords` | Palabras clave. | Array `[{ "value": "..." }]` | O | Repetible |
 | 7.2.7.14 | `subjects` (OCDE) | Campo del conocimiento OCDE. | Array `[{ "scheme": "https://purl.org/pe-repo/ocde/ford", "value": "URI" }]` | R | Repetible |
@@ -866,6 +875,10 @@
 > ⚠️ **Nota técnica:**
 > En la exportación fiel al XML, la clasificación CIP/IPC es la obligatoria para `Patent`.
 > Las clasificaciones OCDE son complementarias y no sustituyen la CIP, aunque ambas puedan convivir en una misma serialización JSON.
+
+> ⚠️ **Nota técnica:**
+> En el XSD oficial v1.1, `Patent` no introduce un elemento `Language` específico en la definición base.
+> No debe añadirse `language` en JSON por simetría con `Publication` o `Product` sin una regla normativa explícita.
 
 **Salida JSON completa:**
 
@@ -916,7 +929,6 @@
   "registrationDate": "2010-01-25",
   "approvalDate": "2012-01-16",
   "countryCode": "PE",
-  "language": ["es"],
   "abstract": [{ "lang": "es", "value": "Sistema de válvula check para circuito cerrado de bombeo de aire en envases dispensadores." }],
   "keywords": [{ "value": "Dispensadores para jabón" }, { "value": "Válvula check" }],
   "url": "https://servicio.indecopi.gob.pe/portalSAE/Expedientes/consultaOIN.jsp?nroExpediente=000056-2010",
@@ -954,9 +966,9 @@
 | 7.2.8.14 | `keywords` | Palabras clave. | Array `[{ "value": "..." }]` | O | Repetible |
 | 7.2.8.15 | `subjects` (OCDE) | Campo del conocimiento OCDE. | Array `[{ "scheme": "https://purl.org/pe-repo/ocde/ford", "value": "URI" }]` | R | Repetible |
 | 7.2.8.16 | `subjects` (materia) | Materias adicionales. | Array `[{ "scheme": "URI_vocab", "value": "término" }]` | R | Repetible |
-| 7.2.8.17 | `partOf` | Recurso del que forma parte este producto. | Objeto `{ "id": "Products/..." }` | O | No repetible |
+| 7.2.8.17 | `partOf` | Recurso de investigación del que forma parte este producto. Puede apuntar a otro `Product`, `Publication` o `Patent` según la relación modelada. | Objeto con referencia a `ResearchOutput`, ej. `{ "id": "Products/..." }` o `{ "id": "Publications/..." }` | O | No repetible |
 | 7.2.8.18 | `originatesFrom` | Proyectos y/o financiamientos de origen del producto. | Array `[{ "project": { "id": "..." } }]` | O | Repetible |
-| 7.2.8.19 | `generatedBy` | Equipamientos usados para generar el producto. | Array `["Equipments/..."]` | O | Repetible |
+| 7.2.8.19 | `generatedBy` | Equipamientos usados para generar el producto. | Array de referencias a `Equipment`; en JSON simplificado puede verse como `["Equipments/..."]` | O | Repetible |
 | — | `lastModified` | Fecha de última modificación. | ISO 8601 | M | No repetible |
 
 > ⚠️ **Nota técnica:**
@@ -964,7 +976,15 @@
 > Lo no canónico en v1.1 es el campo inverso `Equipment.generatedOutputs`, que solo sirve como vista derivada/local.
 
 > ⚠️ **Nota técnica:**
+> En el XML oficial, `GeneratedBy` enlaza con objetos `Equipment`.
+> Una serialización JSON reducida a IDs puede ser útil operativamente, pero sigue siendo una simplificación de la estructura CERIF original.
+
+> ⚠️ **Nota técnica:**
 > `DOI` en `Product` sigue el mismo criterio que `DOI` en `Publication`: el valor canónico es el identificador DOI, no el resolver `https://doi.org/...`.
+
+> ⚠️ **Nota técnica:**
+> En el XSD oficial v1.1, `Product/Language` sí es repetible (`maxOccurs="unbounded"`).
+> Esta cardinalidad no debe confundirse con `Publication/Language`, que en el XML oficial es singular.
 
 **Salida JSON completa:**
 
@@ -1103,7 +1123,7 @@
 }
 ```
 
-### ListRecords — registros activo y eliminado (`persistent`)
+### ListRecords — registro activo
 
 ```json
 {
@@ -1130,14 +1150,6 @@
               "Subject": { "@scheme": "https://purl.org/pe-repo/ocde/ford", "#text": "https://purl.org/pe-repo/ocde/ford#1.05.01" }
             }
           }
-        },
-        {
-          "header": {
-            "identifier": "oai:cris.institucion.edu.pe:Publications/894500",
-            "datestamp": "2026-03-01T08:00:00Z",
-            "setSpec": "publications",
-            "status": "deleted"
-          }
         }
       ],
       "resumptionToken": { "@cursor": "0", "@completeListSize": "250", "#text": "eyJwYWdlIjoyfQ==" }
@@ -1145,6 +1157,9 @@
   }
 }
 ```
+
+> ⚠️ **Nota técnica:**
+> Aunque OAI-PMH permite `header.status="deleted"` cuando el repositorio soporta tombstones y declara `deletedRecord: persistent`, esta guía no lo ejemplifica aquí porque la implementación actual del repositorio todavía no emite esos headers.
 
 ### GetRecord
 

@@ -1,4 +1,4 @@
-# 🇵🇪 Guía para Creación de APIs con Formato JSON — Integración PerúCRIS
+# 🇵🇪 Guía para la creación de APIs con formato JSON — Integración PerúCRIS
 > **Fuente oficial:** Oficina de Tecnologías de Información — Software PERUCRIS — CONCYTEC
 > **Fecha:** Marzo 2026
 > **Protocolo:** OAI-PMH 2.0 + CERIF 1.5
@@ -27,23 +27,27 @@
 9. [JSON de Publicaciones](#9-json-de-publicaciones)
 10. [JSON de Equipamientos](#10-json-de-equipamientos)
 11. [JSON de Patentes](#11-json-de-patentes)
-12. [JSON de Financiamientos](#12-json-de-financiamientos)
-13. [JSON de Proyectos](#13-json-de-proyectos)
-14. [Respuestas de todos los verbos OAI-PMH](#14-respuestas-de-todos-los-verbos-oai-pmh)
+12. [JSON de Products](#12-json-de-products)
+13. [JSON de Financiamientos](#13-json-de-financiamientos)
+14. [JSON de Proyectos](#14-json-de-proyectos)
+15. [Respuestas de todos los verbos OAI-PMH](#15-respuestas-de-todos-los-verbos-oai-pmh)
 
 ---
 
 ## 1. Introducción
 
-El objetivo principal de este documento es describir la forma en que las instituciones deben exponer la información de sus sistemas CRIS institucionales para permitir su interoperabilidad con la **Plataforma PerúCRIS**.
+El objetivo principal de este documento es describir cómo las instituciones deben exponer la información de sus sistemas CRIS institucionales para permitir su interoperabilidad con la **Plataforma PerúCRIS**.
 
 La interoperabilidad se realiza mediante el protocolo **OAI-PMH** (Open Archives Initiative - Protocol for Metadata Harvesting), el cual permite que la plataforma PerúCRIS coseche información estructurada desde sistemas externos.
 
-Las instituciones deben implementar un **endpoint OAI-PMH** que permita consultar los metadatos de sus registros utilizando los verbos definidos por el protocolo. Estos metadatos deben seguir el **perfil de aplicación CERIF** adoptado por PerúCRIS.
+Las instituciones deben implementar un **endpoint OAI-PMH** que permita consultar los metadatos de sus registros mediante los verbos definidos por el protocolo. Estos metadatos deben seguir el **perfil de aplicación CERIF** adoptado por PerúCRIS.
 
-> **Nota:** OAI-PMH es un protocolo basado en XML. Los ejemplos de este documento se presentan en formato **JSON** para facilitar integraciones y pruebas, manteniendo la misma información y jerarquía. La convención usada para mapear XML a JSON es: **atributos con prefijo `@`** y el **texto del nodo en `#text`**.
+> **Nota:** OAI-PMH es un protocolo basado en XML. Los ejemplos de este documento se presentan en formato **JSON** para facilitar integraciones y pruebas, manteniendo la misma información y jerarquía. La convención utilizada para mapear XML a JSON es: **atributos con prefijo `@`** y el **texto del nodo en `#text`**.
 
-> **Nota técnica:** El XML oficial de PerúCRIS v1.1 es la fuente de verdad. Cuando esta guía JSON muestre valores adaptados para API - por ejemplo `metadataPrefix=perucris-cerif`, `metadataNamespace=https://purl.org/pe-repo/perucris/cerif` o sets abreviados como `persons` - debe prevalecer el equivalente canónico del perfil XML si se busca conformidad formal con PerúCRIS.
+> **Nota técnica:** Esta guía documenta dos planos que no deben confundirse.
+> - **Perfil XML oficial (canónico):** `metadataPrefix=cerif_perucris`, `metadataNamespace=https://purl.org/pe-repo/cerif-profile/1.0/`, `schema=https://purl.org/pe-repo/cerif-profile/1.0/perucris-cerif-profile.xsd`, `setSpec` `perucris_*`.
+> - **Adaptación JSON para APIs:** `metadataPrefix=perucris-cerif`, `metadataNamespace=https://purl.org/pe-repo/perucris/cerif`, sets abreviados como `persons` o `products`.
+> Si se busca conformidad formal con PerúCRIS, siempre prevalece el perfil XML oficial.
 
 ---
 
@@ -321,7 +325,7 @@ Obtiene registros completos en formato CERIF.
 
 > **Cuándo usarlo:** no debe usarse. Una vez emitido `resumptionToken`, la continuación debe enviarse solo con ese token.
 
-> **Nota técnica:** No se deben reenviar `metadataPrefix`, `set`, `from` ni `until` cuando ya existe `resumptionToken`. Si esos parámetros se mezclan, la implementación debería responder `badArgument`.
+> **Nota técnica:** No se deben reenviar `metadataPrefix`, `set`, `from` ni `until` cuando ya existe `resumptionToken`. Si esos parámetros se mezclan, la implementación debe responder `badArgument`.
 
 ---
 
@@ -417,14 +421,14 @@ Las principales entidades definidas en el perfil de aplicación son:
 - No se deben utilizar elementos o vocabularios **diferentes** a los establecidos en el perfil.
 - La estructura semántica se basa preferentemente en **CERIF 1.5**.
 
-> **Nota técnica:** `Product` forma parte del perfil XML oficial de PerúCRIS v1.1. Esta guía lo menciona por referencia en sets y relaciones, aunque no incluya una sección independiente con ejemplo completo.
+> **Nota técnica:** `Product` forma parte del perfil XML oficial de PerúCRIS v1.1. En esta guía se documenta como entidad válida del modelo y no debe tratarse como opcional ni como una exclusión de alcance cuando una implementación concreta todavía no lo exponga en backend.
 
 ---
 
 ## 6. Estructura general de los JSON
 
 Cada entidad mantiene:
-- `id` estable (ej. `Persons/…`, `OrgUnits/…`)
+- `id` estable (ej. `Persons/…`, `OrgUnits/…`, `Publications/…`, `Products/…`)
 - `identifiers` como lista con `scheme` + `value` por defecto; en `Publication` esta guía usa `type` + `value` para reflejar elementos XML dedicados como `DOI`, `ISSN` o `Handle`
 - Campos multilenguaje como lista (`lang`/`value`)
 - Relaciones por referencia (`id`) o por objeto anidado según necesidad
@@ -774,7 +778,7 @@ Ejemplo completo con identificadores (Handle, DOI, ISBN, ISSN, PMCID, ISI, SCP, 
   "edition": "2a ed.",
   "startPage": "285",
   "endPage": "309",
-  "language": ["es", "en"],
+  "language": "es",
   "license": [
     {
       "scheme": "https://www.openaire.eu/cerif-profile/vocab/LicenseTypes",
@@ -932,6 +936,8 @@ Ejemplo completo con identificadores (Handle, DOI, ISBN, ISSN, PMCID, ISI, SCP, 
 
 > **Nota técnica:** La relación interoperable canónica de `originatesFrom` se satisface con referencias por `id`. Si se embeben atributos adicionales de `Project` o `Funding`, deben entenderse como expansión local de conveniencia y no como sustituto del vínculo CERIF canónico.
 
+> **Nota técnica:** `Publication/Language` es singular en el XSD oficial v1.1. No debe documentarse como arreglo repetible por simetría con otras entidades; `Product/Language` sí es repetible y `Patent` no introduce un elemento `Language` específico en la definición base.
+
 ---
 
 ## 10. JSON de Equipamientos
@@ -976,7 +982,7 @@ Ejemplo completo con identificadores (CRISID, serial), propietario (OrgUnit), ub
 }
 ```
 
-> **Nota técnica:** `type` en `Equipment` debe usar el vocabulario oficial de tipos de equipamiento definido para PerúCRIS, no un tipo COAR de resultado. El campo `generatedOutputs` se conserva aquí solo como vista inversa/local; la relación canónica del perfil XML se expresa desde `Product` mediante `generatedBy`.
+> **Nota técnica:** `type` en `Equipment` debe usar el vocabulario oficial de tipos de equipamiento definido para PerúCRIS, no un tipo COAR de resultado. El campo `generatedOutputs` se conserva aquí solo como extensión local y vista inversa de conveniencia; la relación canónica del perfil XML se expresa desde `Product` mediante `generatedBy`.
 
 ---
 
@@ -1027,7 +1033,6 @@ Ejemplo completo con número, inventores, titulares, emisor, fechas, país, mate
   "registrationDate": "2010-01-25",
   "approvalDate": "2012-01-16",
   "countryCode": "PE",
-  "language": ["es"],
   "abstract": [
     { "lang": "es", "value": "Resumen técnico de la patente (ejemplo)." }
   ],
@@ -1049,9 +1054,74 @@ Ejemplo completo con número, inventores, titulares, emisor, fechas, país, mate
 }
 ```
 
+> **Nota técnica:** En el XSD oficial v1.1, `Patent` no introduce un elemento `Language` específico en la definición base. No debe añadirse un campo genérico `language` en JSON por analogía con `Publication` o `Product`.
+
 ---
 
-## 12. JSON de Financiamientos
+## 12. JSON de Products
+
+Ejemplo completo de `Product` como entidad oficial del perfil PerúCRIS: datasets, software, modelos, informes técnicos y otros resultados distintos de publicaciones y patentes.
+
+```json
+{
+  "id": "Products/DS-2023-001",
+  "type": "http://purl.org/coar/resource_type/c_ddb1",
+  "access": "http://purl.org/coar/access_right/c_abf2",
+  "name": [
+    { "lang": "es", "value": "Dataset de secuencias genómicas de vicuñas silvestres - Puno 2023" },
+    { "lang": "en", "value": "Genomic sequence dataset of wild vicuñas - Puno 2023" }
+  ],
+  "language": ["es", "en"],
+  "versionInfo": ["1.0.0"],
+  "doi": "10.1234/dataset.vicunas.2023",
+  "url": "https://datos.unmsm.edu.pe/dataset/vicunas2023",
+  "creators": [
+    {
+      "person": {
+        "id": "Persons/28521427",
+        "name": "Paolo Edgar Cabrera Sánchez"
+      },
+      "order": 1
+    }
+  ],
+  "publishers": [
+    {
+      "orgUnit": {
+        "id": "OrgUnits/1",
+        "name": [{ "lang": "es", "value": "Universidad Nacional Mayor de San Marcos" }]
+      }
+    }
+  ],
+  "license": [
+    { "url": "https://creativecommons.org/licenses/by/4.0/" }
+  ],
+  "description": [
+    { "lang": "es", "value": "Secuencias SNP de 120 especímenes de vicuña del altiplano puneño." }
+  ],
+  "subjects": [
+    {
+      "scheme": "https://purl.org/pe-repo/ocde/ford",
+      "value": "https://purl.org/pe-repo/ocde/ford#1.06.05"
+    }
+  ],
+  "originatesFrom": [
+    { "project": { "id": "Projects/358478" } },
+    { "funding": { "id": "Fundings/187597" } }
+  ],
+  "generatedBy": ["Equipments/82394874"],
+  "lastModified": "2026-02-20T12:00:00Z"
+}
+```
+
+> **Nota técnica:** `Product` es una entidad oficial del perfil XML de PerúCRIS v1.1 y debe formar parte del modelo conceptual aunque una implementación concreta todavía no exponga el set `products` en backend.
+
+> **Nota técnica:** En el XSD oficial v1.1, `Product/Language` es repetible y `Product/GeneratedBy` es la relación canónica hacia `Equipment`.
+
+> **Nota técnica:** Si se serializa `generatedBy` como arreglo de IDs (`["Equipments/..."]`), debe entenderse como simplificación JSON de un enlace CERIF cuyo modelo XML referencia objetos `Equipment`. Del mismo modo, `partOf`, cuando se use, puede apuntar a otro `ResearchOutput` y no solo a `Product`.
+
+---
+
+## 13. JSON de Financiamientos
 
 Ejemplo completo con award number, funder, monto, fechas y relación a proyectos.
 
@@ -1100,9 +1170,11 @@ Ejemplo completo con award number, funder, monto, fechas y relación a proyectos
 
 > **Nota técnica:** `Funding.type` es obligatorio y debe tiparse con `OpenAIRE_Funding_Types`. Los montos se representan como enteros sin decimales en los ejemplos alineados con PerúCRIS v1.1.
 
+> **Nota técnica:** `relatedProjects` se conserva en este ejemplo solo como extensión local o vista inversa de conveniencia. El perfil XML oficial no define ese campo como parte canónica de `Funding`.
+
 ---
 
-## 13. JSON de Proyectos
+## 14. JSON de Proyectos
 
 Ejemplo completo con participantes (personas y OrgUnits), estado, fechas, palabras clave, áreas OCDE y salidas vinculadas.
 
@@ -1169,17 +1241,19 @@ Ejemplo completo con participantes (personas y OrgUnits), estado, fechas, palabr
 
 > **Nota técnica:** `status` en `Project` debe usar la URI controlada del vocabulario `estadoProyecto`; literales libres como `completed` no son canónicos para interoperabilidad PerúCRIS.
 
-> **Nota técnica:** El bloque `outputs` se conserva como vista inversa/local para facilitar consumo de API, pero no sustituye el intercambio canónico del perfil XML. Las relaciones oficiales se expresan desde `Publication`, `Patent` o `Product` hacia `Project`/`Funding` mediante `originatesFrom`.
+> **Nota técnica:** El bloque `outputs` se conserva como extensión local y vista inversa de conveniencia para facilitar consumo de API, pero no sustituye el intercambio canónico del perfil XML. Las relaciones oficiales se expresan desde `Publication`, `Patent` o `Product` hacia `Project`/`Funding` mediante `originatesFrom`.
 
 ---
 
-## 14. Respuestas de todos los verbos OAI-PMH
+## 15. Respuestas de todos los verbos OAI-PMH
 
 > **Nota técnica:** Los bloques de esta sección son proyecciones JSON de envelopes XML OAI-PMH. Cuando se requiera conformidad estricta con el XML oficial de PerúCRIS v1.1, los valores canónicos son `metadataPrefix=cerif_perucris`, `metadataNamespace=https://purl.org/pe-repo/cerif-profile/1.0/` y `schema=https://purl.org/pe-repo/cerif-profile/1.0/perucris-cerif-profile.xsd`. En los ejemplos se conserva `perucris-cerif` como adaptación JSON de esta guía.
 
 > **Referencia cruzada:** Para el marco normativo, la semántica de errores OAI-PMH y las equivalencias canónicas XML/JSON, ver `docs/Directrices-perucris.md`. La sección 2 de esta guía mantiene el resumen operativo por verbo.
 
-### 14.1 Identify
+> **Nota técnica:** En el backend actual de este repositorio, `Identify.deletedRecord="persistent"` no implica todavía emisión efectiva de `header.status="deleted"`; debe tratarse como limitación operativa explícita mientras no existan tombstones expuestos.
+
+### 15.1 Identify
 
 ```json
 {
@@ -1202,7 +1276,7 @@ Ejemplo completo con participantes (personas y OrgUnits), estado, fechas, palabr
 }
 ```
 
-### 14.2 ListMetadataFormats
+### 15.2 ListMetadataFormats
 
 ```json
 {
@@ -1230,7 +1304,7 @@ Ejemplo completo con participantes (personas y OrgUnits), estado, fechas, palabr
 }
 ```
 
-### 14.3 ListSets
+### 15.3 ListSets
 
 ```json
 {
@@ -1256,7 +1330,7 @@ Ejemplo completo con participantes (personas y OrgUnits), estado, fechas, palabr
 }
 ```
 
-### 14.4 ListIdentifiers
+### 15.4 ListIdentifiers
 
 ```json
 {
@@ -1294,7 +1368,7 @@ Ejemplo completo con participantes (personas y OrgUnits), estado, fechas, palabr
 }
 ```
 
-### 14.5 ListRecords (primera página)
+### 15.5 ListRecords (primera página)
 
 ```json
 {
@@ -1332,7 +1406,7 @@ Ejemplo completo con participantes (personas y OrgUnits), estado, fechas, palabr
               "DOI": "10.1234/abcd.2026.0001",
               "Handle": "https://hdl.handle.net/20.500.12345/9876",
               "PublicationDate": "2026-01-15",
-              "Language": ["es"],
+              "Language": "es",
               "Abstract": [
                 { "@xml:lang": "es", "#text": "Resumen de ejemplo." }
               ],
@@ -1359,7 +1433,7 @@ Ejemplo completo con participantes (personas y OrgUnits), estado, fechas, palabr
 }
 ```
 
-### 14.6 ListRecords (continuación con token)
+### 15.6 ListRecords (continuación con token)
 
 ```json
 {
@@ -1384,7 +1458,7 @@ Ejemplo completo con participantes (personas y OrgUnits), estado, fechas, palabr
 }
 ```
 
-### 14.7 GetRecord
+### 15.7 GetRecord
 
 ```json
 {
@@ -1421,7 +1495,7 @@ Ejemplo completo con participantes (personas y OrgUnits), estado, fechas, palabr
             "DOI": "10.1234/abcd.2026.0001",
             "Handle": "https://hdl.handle.net/20.500.12345/9876",
             "PublicationDate": "2026-01-15",
-            "Language": ["es"],
+            "Language": "es",
             "Abstract": [
               { "@xml:lang": "es", "#text": "Resumen de ejemplo." }
             ],
@@ -1442,7 +1516,7 @@ Ejemplo completo con participantes (personas y OrgUnits), estado, fechas, palabr
 }
 ```
 
-### 14.8 Error OAI-PMH
+### 15.8 Error OAI-PMH
 
 ```json
 {
@@ -1458,14 +1532,14 @@ Ejemplo completo con participantes (personas y OrgUnits), estado, fechas, palabr
       "#text": "https://cris.institucion.edu.pe/oai"
     },
     "error": {
-      "@code": "badArgument",
-      "#text": "El valor del parámetro set no corresponde a un set expuesto por el repositorio."
+      "@code": "noSetHierarchy",
+      "#text": "El set solicitado no existe o no está habilitado en este repositorio."
     }
   }
 }
 ```
 
-> **Nota técnica:** Use `badArgument` para combinaciones inválidas de parámetros - por ejemplo `resumptionToken` junto con `from`/`until` - o para un `set` no expuesto por el repositorio. Reserve `noSetHierarchy` para implementaciones que no soportan sets en absoluto.
+> **Nota técnica:** Use `badArgument` para combinaciones inválidas de parámetros - por ejemplo `resumptionToken` junto con `from`/`until` - y `noSetHierarchy` cuando el set solicitado no exista o no esté habilitado en este repositorio.
 
 ---
 
