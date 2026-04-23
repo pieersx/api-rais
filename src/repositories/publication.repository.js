@@ -17,7 +17,6 @@ import {
 } from '../utils/constants.js';
 
 const ENTITY_TYPE = 'Publications';
-const FALLBACK_DATE = '2014-01-01T00:00:00Z';
 const JOURNAL_CONTAINER_TYPE = 'http://purl.org/coar/resource_type/c_0640';
 const BOOK_CONTAINER_TYPE = 'http://purl.org/coar/resource_type/c_2f33';
 const SERIAL_PUBLICATION_TYPES = new Set(['articulo', 'evento', 'ensayo']);
@@ -101,19 +100,22 @@ function normalizeLanguageCode(code) {
   return null;
 }
 
-function parseLanguages(languageValue) {
-  if (!languageValue) return [];
+function parseLanguage(languageValue) {
+  if (!languageValue) return null;
 
   const parts = String(languageValue)
     .split(/[;,/|]/)
     .map(part => part.trim())
     .filter(Boolean);
 
-  const normalized = parts
-    .map(normalizeLanguageCode)
-    .filter(Boolean);
+  for (const part of parts) {
+    const normalized = normalizeLanguageCode(part);
+    if (normalized) {
+      return normalized;
+    }
+  }
 
-  return [...new Set(normalized)];
+  return null;
 }
 
 function dedupeTypedIdentifiers(identifiers) {
@@ -217,7 +219,7 @@ function buildPersonFromAuthor(author) {
   return person;
 }
 
-function buildAuthorEntry(author, fallbackOrder, defaultLang) {
+function buildAuthorEntry(author, fallbackOrder) {
   const person = buildPersonFromAuthor(author);
   if (!person) return null;
 
@@ -241,10 +243,6 @@ function buildAuthorEntry(author, fallbackOrder, defaultLang) {
     entry.affiliations = [affiliation];
   }
 
-  if (defaultLang && !entry.person.personName.firstNames && !entry.person.personName.familyNames) {
-    entry.person.personName.lang = defaultLang;
-  }
-
   return entry;
 }
 
@@ -264,10 +262,9 @@ function buildEditorEntryFromName(name, fallbackOrder) {
 
 function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCodes = [] } = {}) {
   const typeUri = PUBLICATION_TYPE_MAP[row.tipo_publicacion] || PUBLICATION_TYPE_MAP.default;
-  const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
+  const lastModified = toISO8601(row.updated_at);
   const titleValue = row.titulo || row.publicacion_nombre || `Publicación ${row.id}`;
-  const languages = parseLanguages(row.idioma);
-  const defaultLang = languages[0] || 'es';
+  const language = parseLanguage(row.idioma);
   const thesisPublication = isThesisPublication(row);
 
   const publication = {
@@ -277,10 +274,13 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
       scheme: VOCABULARIES.COAR_PUBLICATION_TYPES,
       value: typeUri,
     },
-    title: filterEmpty([createTitle(titleValue, defaultLang)]),
+    title: filterEmpty([createTitle(titleValue, language)]),
     access: inferAccessRights(row).uri,
-    lastModified,
   };
+
+  if (lastModified) {
+    publication.lastModified = lastModified;
+  }
 
   const identifiers = filterEmpty([
     createTypedIdentifier('DOI', row.doi),
@@ -303,7 +303,7 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
         const category = normalizeCategory(author.categoria);
         return !EDITOR_CATEGORIES.has(category) && !ADVISOR_CATEGORIES.has(category);
       })
-      .map((author, index) => buildAuthorEntry(author, index + 1, defaultLang))
+      .map((author, index) => buildAuthorEntry(author, index + 1))
       .filter(Boolean);
 
     if (publicationAuthors.length > 0) {
@@ -312,7 +312,7 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
 
     const editorEntries = authors
       .filter(author => EDITOR_CATEGORIES.has(normalizeCategory(author.categoria)))
-      .map((author, index) => buildAuthorEntry(author, index + 1, defaultLang))
+      .map((author, index) => buildAuthorEntry(author, index + 1))
       .filter(Boolean)
       .map(entry => ({ person: entry.person, order: entry.order }));
 
@@ -331,7 +331,7 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
     if (thesisPublication) {
       const advisors = authors
         .filter(author => ADVISOR_CATEGORIES.has(normalizeCategory(author.categoria)))
-        .map((author, index) => buildAuthorEntry(author, index + 1, defaultLang))
+        .map((author, index) => buildAuthorEntry(author, index + 1))
         .filter(Boolean)
         .map(entry => ({ person: entry.person }));
 
@@ -449,14 +449,20 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
   if (row.pagina_inicial) publication.startPage = String(row.pagina_inicial);
   if (row.pagina_final) publication.endPage = String(row.pagina_final);
 
-  if (languages.length > 0) {
-    publication.language = languages;
+  if (language) {
+    publication.language = language;
   }
 
   if (row.resumen) {
     const text = row.resumen instanceof Buffer ? row.resumen.toString('utf-8') : String(row.resumen);
     if (text.trim()) {
-      publication.abstract = [{ lang: defaultLang, value: text.trim() }];
+      const abstract = { value: text.trim() };
+
+      if (language) {
+        abstract.lang = language;
+      }
+
+      publication.abstract = [abstract];
     }
   }
 
@@ -464,7 +470,15 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
     publication.keywords = keywords
       .map(keyword => String(keyword.palabra_clave || '').trim())
       .filter(Boolean)
-      .map(value => ({ lang: defaultLang, value }));
+      .map(value => {
+        const keywordEntry = { value };
+
+        if (language) {
+          keywordEntry.lang = language;
+        }
+
+        return keywordEntry;
+      });
   }
 
   if (ocdeCodes.length > 0) {
@@ -569,6 +583,8 @@ export async function countPublications(from, until) {
     FROM Publicacion p
     WHERE p.estado = 1
       AND p.validado = 1
+      AND p.updated_at IS NOT NULL
+      AND p.updated_at <> '0000-00-00 00:00:00'
   `;
 
   if (dateFilter.clause) {
@@ -592,6 +608,8 @@ export async function getPublications({ from, until, offset = 0, limit = env.PAG
     FROM Publicacion p
     WHERE p.estado = 1
       AND p.validado = 1
+      AND p.updated_at IS NOT NULL
+      AND p.updated_at <> '0000-00-00 00:00:00'
   `;
 
   if (dateFilter.clause) {
@@ -609,7 +627,7 @@ export async function getPublications({ from, until, offset = 0, limit = env.PAG
     results.push({
       header: {
         identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
-        datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
+        datestamp: toISO8601(row.updated_at),
         setSpec: 'publications',
       },
       metadata: {
@@ -634,6 +652,8 @@ export async function getPublicationHeaders({ from, until, offset = 0, limit = e
     FROM Publicacion p
     WHERE p.estado = 1
       AND p.validado = 1
+      AND p.updated_at IS NOT NULL
+      AND p.updated_at <> '0000-00-00 00:00:00'
   `;
 
   if (dateFilter.clause) {
@@ -646,7 +666,7 @@ export async function getPublicationHeaders({ from, until, offset = 0, limit = e
 
   return rows.map(row => ({
     identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
-    datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
+    datestamp: toISO8601(row.updated_at),
     setSpec: 'publications',
   }));
 }
@@ -664,6 +684,8 @@ export async function getPublicationById(id) {
       WHERE p.id = ?
         AND p.estado = 1
         AND p.validado = 1
+        AND p.updated_at IS NOT NULL
+        AND p.updated_at <> '0000-00-00 00:00:00'
     `,
     [id]
   );
@@ -678,7 +700,7 @@ export async function getPublicationById(id) {
   return {
     header: {
       identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
-      datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
+      datestamp: toISO8601(row.updated_at),
       setSpec: 'publications',
     },
     metadata: {
