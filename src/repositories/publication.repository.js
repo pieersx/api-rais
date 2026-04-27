@@ -8,7 +8,6 @@ import {
   createTitle,
   createTypedIdentifier,
   buildDateFilter,
-  inferAccessRights,
 } from '../utils/formatters.js';
 import {
   PUBLICATION_TYPE_MAP,
@@ -20,6 +19,7 @@ const ENTITY_TYPE = 'Publications';
 const JOURNAL_CONTAINER_TYPE = 'http://purl.org/coar/resource_type/c_0640';
 const BOOK_CONTAINER_TYPE = 'http://purl.org/coar/resource_type/c_2f33';
 const SERIAL_PUBLICATION_TYPES = new Set(['articulo', 'evento', 'ensayo']);
+const AUTHOR_CATEGORIES = new Set(['autor', 'autor de correspondencia', 'tesista', '']);
 const EDITOR_CATEGORIES = new Set(['editor']);
 const ADVISOR_CATEGORIES = new Set(['asesor', 'co-asesor', 'co asesor']);
 const RENATI_THESIS_TYPE_URI = `${VOCABULARIES.RENATI_TYPE}#tesis`;
@@ -67,55 +67,17 @@ function mapRenatiLevelUri(tipoTesis) {
   return null;
 }
 
-function normalizeLanguageCode(code) {
-  if (!code) return null;
-
-  const normalized = String(code).trim().toLowerCase();
-
-  const languageMap = {
-    es: 'es',
-    spa: 'es',
-    esp: 'es',
-    español: 'es',
-    espanol: 'es',
-    castellano: 'es',
-    en: 'en',
-    eng: 'en',
-    inglés: 'en',
-    ingles: 'en',
-    pt: 'pt',
-    por: 'pt',
-    portugués: 'pt',
-    portugues: 'pt',
-  };
-
-  if (languageMap[normalized]) {
-    return languageMap[normalized];
-  }
-
-  if (/^[a-z]{2}$/.test(normalized)) {
-    return normalized;
-  }
-
-  return null;
-}
-
 function parseLanguage(languageValue) {
   if (!languageValue) return null;
 
-  const parts = String(languageValue)
-    .split(/[;,/|]/)
-    .map(part => part.trim())
-    .filter(Boolean);
+  const value = String(languageValue).trim();
 
-  for (const part of parts) {
-    const normalized = normalizeLanguageCode(part);
-    if (normalized) {
-      return normalized;
-    }
-  }
+  if (!value) return null;
+  if (/[;,/|]/.test(value)) return null;
+  if (/\s/.test(value)) return null;
+  if (!/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(value)) return null;
 
-  return null;
+  return value;
 }
 
 function dedupeTypedIdentifiers(identifiers) {
@@ -219,14 +181,18 @@ function buildPersonFromAuthor(author) {
   return person;
 }
 
-function buildAuthorEntry(author, fallbackOrder) {
+function buildAuthorEntry(author) {
   const person = buildPersonFromAuthor(author);
   if (!person) return null;
 
-  const entry = {
-    person,
-    order: Number(author.orden || fallbackOrder),
-  };
+  const entry = { person };
+
+  if (author.orden !== null && author.orden !== undefined && author.orden !== '') {
+    const order = Number(author.orden);
+    if (!Number.isNaN(order)) {
+      entry.order = order;
+    }
+  }
 
   if (author.facultad_id && author.facultad_nombre) {
     const affiliation = {
@@ -246,7 +212,7 @@ function buildAuthorEntry(author, fallbackOrder) {
   return entry;
 }
 
-function buildEditorEntryFromName(name, fallbackOrder) {
+function buildEditorEntryFromName(name) {
   const fullName = String(name || '').trim();
   if (!fullName) return null;
 
@@ -256,27 +222,31 @@ function buildEditorEntryFromName(name, fallbackOrder) {
         fullName,
       },
     },
-    order: Number(fallbackOrder),
   };
 }
 
 function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCodes = [] } = {}) {
-  const typeUri = PUBLICATION_TYPE_MAP[row.tipo_publicacion] || PUBLICATION_TYPE_MAP.default;
+  const typeUri = PUBLICATION_TYPE_MAP[row.tipo_publicacion];
   const lastModified = toISO8601(row.updated_at);
-  const titleValue = row.titulo || row.publicacion_nombre || `Publicación ${row.id}`;
+  const titleValue = row.titulo ? String(row.titulo).trim() : '';
   const language = parseLanguage(row.idioma);
   const thesisPublication = isThesisPublication(row);
 
   const publication = {
     '@id': toCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    type: {
+  };
+
+  if (typeUri) {
+    publication.type = {
       scheme: VOCABULARIES.COAR_PUBLICATION_TYPES,
       value: typeUri,
-    },
-    title: filterEmpty([createTitle(titleValue, language)]),
-    access: inferAccessRights(row).uri,
-  };
+    };
+  }
+
+  if (titleValue) {
+    publication.title = filterEmpty([createTitle(titleValue, language)]);
+  }
 
   if (lastModified) {
     publication.lastModified = lastModified;
@@ -299,11 +269,8 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
 
   if (authors.length > 0) {
     const publicationAuthors = authors
-      .filter(author => {
-        const category = normalizeCategory(author.categoria);
-        return !EDITOR_CATEGORIES.has(category) && !ADVISOR_CATEGORIES.has(category);
-      })
-      .map((author, index) => buildAuthorEntry(author, index + 1))
+      .filter(author => AUTHOR_CATEGORIES.has(normalizeCategory(author.categoria)))
+      .map(author => buildAuthorEntry(author))
       .filter(Boolean);
 
     if (publicationAuthors.length > 0) {
@@ -312,13 +279,21 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
 
     const editorEntries = authors
       .filter(author => EDITOR_CATEGORIES.has(normalizeCategory(author.categoria)))
-      .map((author, index) => buildAuthorEntry(author, index + 1))
+      .map(author => buildAuthorEntry(author))
       .filter(Boolean)
-      .map(entry => ({ person: entry.person, order: entry.order }));
+      .map(entry => {
+        const editorEntry = { person: entry.person };
+
+        if (entry.order !== undefined) {
+          editorEntry.order = entry.order;
+        }
+
+        return editorEntry;
+      });
 
     if (editorEntries.length === 0 && row.editor) {
       const parsedEditors = parseEditorNames(row.editor)
-        .map((name, index) => buildEditorEntryFromName(name, index + 1))
+        .map(name => buildEditorEntryFromName(name))
         .filter(Boolean);
 
       if (parsedEditors.length > 0) {
@@ -331,7 +306,7 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
     if (thesisPublication) {
       const advisors = authors
         .filter(author => ADVISOR_CATEGORIES.has(normalizeCategory(author.categoria)))
-        .map((author, index) => buildAuthorEntry(author, index + 1))
+        .map(author => buildAuthorEntry(author))
         .filter(Boolean)
         .map(entry => ({ person: entry.person }));
 
@@ -372,54 +347,6 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
         qualification,
       };
     }
-  }
-
-  const containerIssn = filterEmpty([row.issn, row.issn_e]).map(value => String(value));
-  const containerIsbn = filterEmpty([row.isbn]).map(value => String(value));
-  const containerTitle = row.publicacion_nombre || row.nombre_libro;
-
-  if (containerTitle || containerIssn.length > 0 || containerIsbn.length > 0) {
-    const containerType = containerIssn.length > 0 ? JOURNAL_CONTAINER_TYPE : BOOK_CONTAINER_TYPE;
-
-    const embeddedPublication = {
-      id: toCerifId('Publications', `SRC-${row.id}`),
-      type: containerType,
-    };
-
-    if (containerTitle) {
-      embeddedPublication.title = [{ value: String(containerTitle) }];
-    }
-
-    if (containerIssn.length > 0) {
-      embeddedPublication.issn = [...new Set(containerIssn)];
-    }
-
-    if (containerIsbn.length > 0) {
-      embeddedPublication.isbn = [...new Set(containerIsbn)];
-    }
-
-    publication.publishedIn = {
-      publication: embeddedPublication,
-    };
-  }
-
-  if (row.tipo_publicacion === 'capitulo' && (row.nombre_libro || row.isbn)) {
-    const partOfPublication = {
-      id: toCerifId('Publications', `BOOK-${row.id}`),
-      type: BOOK_CONTAINER_TYPE,
-    };
-
-    if (row.nombre_libro) {
-      partOfPublication.title = [{ value: String(row.nombre_libro) }];
-    }
-
-    if (row.isbn) {
-      partOfPublication.isbn = [String(row.isbn)];
-    }
-
-    publication.partOf = {
-      publication: partOfPublication,
-    };
   }
 
   if (row.editorial) {
