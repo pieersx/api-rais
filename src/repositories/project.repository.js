@@ -11,24 +11,17 @@ import {
 } from '../utils/formatters.js';
 import {
   IDENTIFIER_SCHEMES,
-  PROJECT_STATUS,
   PROJECT_TYPE_OCDE_MAP,
   VOCABULARIES,
   NAMESPACES,
 } from '../utils/constants.js';
 
 const ENTITY_TYPE = 'Projects';
-const FALLBACK_DATE = '2014-01-01T00:00:00Z';
 const OCDE_PROJECT_TYPE_SCHEME = 'https://purl.org/pe-repo/ocde/tipoProyecto';
-const CTI_PROJECT_TYPE_SCHEME = 'https://purl.org/pe-repo/concytec/terminos';
-
-function toSlug(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
+const PROJECT_STATUS_MAP = {
+  1: 'https://purl.org/pe-repo/concytec/estadoProyecto#activo',
+  2: 'https://purl.org/pe-repo/concytec/estadoProyecto#concluido',
+};
 
 function getProjectTypes(row) {
   const types = [];
@@ -43,14 +36,6 @@ function getProjectTypes(row) {
     types.push({
       scheme: OCDE_PROJECT_TYPE_SCHEME,
       value: ocdeType,
-    });
-  }
-
-  const ctiSlug = toSlug(projectType);
-  if (ctiSlug) {
-    types.push({
-      scheme: CTI_PROJECT_TYPE_SCHEME,
-      value: `${CTI_PROJECT_TYPE_SCHEME}#${ctiSlug}`,
     });
   }
 
@@ -69,11 +54,10 @@ function hasFundingData(row) {
 
 function buildParticipantRole(integrante) {
   const rawRole = String(integrante.tipo_nombre || integrante.condicion || '').trim();
-  if (rawRole) return rawRole;
-  return 'Participante';
+  return rawRole || null;
 }
 
-function buildParticipants(row, integrantes) {
+function buildParticipants(integrantes) {
   const participants = [];
 
   for (const integrante of integrantes) {
@@ -81,59 +65,52 @@ function buildParticipants(row, integrantes) {
       .filter(Boolean)
       .join(' ')
       .trim();
+    const role = buildParticipantRole(integrante);
 
-    if (!integrante.investigador_id && !fullName) continue;
+    if (!role || (!integrante.investigador_id && !fullName)) continue;
 
     const participant = {
-      role: buildParticipantRole(integrante),
+      role,
     };
 
     if (integrante.investigador_id) {
       participant.person = {
         id: toCerifId('Persons', integrante.investigador_id),
-        name: fullName || `Investigador ${integrante.investigador_id}`,
       };
+
+      if (fullName) {
+        participant.person.name = fullName;
+      }
     } else if (fullName) {
       participant.person = {
         name: fullName,
       };
     }
 
-    participants.push(participant);
-  }
-
-  if (row.facultad_id && row.facultad_nombre) {
-    participants.push({
-      orgUnit: {
-        id: toCerifId('OrgUnits', `F${row.facultad_id}`),
-        name: row.facultad_nombre,
-      },
-      role: 'Institución ejecutora',
-    });
-  }
-
-  if (row.grupo_id && row.grupo_nombre) {
-    participants.push({
-      orgUnit: {
-        id: toCerifId('OrgUnits', `G${row.grupo_id}`),
-        name: row.grupo_nombre,
-      },
-      role: 'Grupo de investigación',
-    });
+    if (participant.person) {
+      participants.push(participant);
+    }
   }
 
   return participants;
 }
 
 function mapToCerif(row, integrantes = [], ocde = null, abstract = null, outputs = null, equipments = []) {
-  const titleValue = row.titulo || row.codigo_proyecto || `Proyecto ${row.id}`;
+  const titleValue = row.titulo ? String(row.titulo).trim() : '';
+  const lastModified = toISO8601(row.updated_at);
 
   const project = {
     '@id': toCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    title: filterEmpty([createTitle(titleValue, 'es')]),
-    lastModified: toISO8601(row.updated_at) || FALLBACK_DATE,
   };
+
+  if (titleValue) {
+    project.title = filterEmpty([createTitle(titleValue, 'es')]);
+  }
+
+  if (lastModified) {
+    project.lastModified = lastModified;
+  }
 
   if (row.codigo_proyecto) {
     project.identifiers = filterEmpty([
@@ -158,8 +135,8 @@ function mapToCerif(row, integrantes = [], ocde = null, abstract = null, outputs
       : row.fecha_fin;
   }
 
-  if (row.estado !== undefined && PROJECT_STATUS[row.estado]) {
-    project.status = PROJECT_STATUS[row.estado];
+  if (row.estado !== undefined && PROJECT_STATUS_MAP[row.estado]) {
+    project.status = PROJECT_STATUS_MAP[row.estado];
   }
 
   if (row.palabras_clave) {
@@ -188,7 +165,7 @@ function mapToCerif(row, integrantes = [], ocde = null, abstract = null, outputs
     project.researchLine = [row.linea_nombre];
   }
 
-  const participants = buildParticipants(row, integrantes);
+  const participants = buildParticipants(integrantes);
   if (participants.length > 0) {
     project.participants = participants;
   }
@@ -345,7 +322,7 @@ export async function getProjects({ from, until, offset = 0, limit = env.PAGE_SI
     results.push({
       header: {
         identifier: toOAIIdentifier(ENTITY_TYPE, projectRow.id),
-        datestamp: toISO8601(projectRow.updated_at) || FALLBACK_DATE,
+        datestamp: toISO8601(projectRow.updated_at),
         setSpec: 'projects',
       },
       metadata: {
@@ -381,7 +358,7 @@ export async function getProjectHeaders({ from, until, offset = 0, limit = env.P
 
   return rows.map(row => ({
     identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
-    datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
+    datestamp: toISO8601(row.updated_at),
     setSpec: 'projects',
   }));
 }
@@ -430,7 +407,7 @@ export async function getProjectById(id) {
   return {
     header: {
       identifier: toOAIIdentifier(ENTITY_TYPE, projectRow.id),
-      datestamp: toISO8601(projectRow.updated_at) || FALLBACK_DATE,
+      datestamp: toISO8601(projectRow.updated_at),
       setSpec: 'projects',
     },
     metadata: {

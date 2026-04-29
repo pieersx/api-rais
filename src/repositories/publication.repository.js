@@ -23,12 +23,53 @@ const AUTHOR_CATEGORIES = new Set(['autor', 'autor de correspondencia', 'tesista
 const EDITOR_CATEGORIES = new Set(['editor']);
 const ADVISOR_CATEGORIES = new Set(['asesor', 'co-asesor', 'co asesor']);
 const RENATI_THESIS_TYPE_URI = `${VOCABULARIES.RENATI_TYPE}#tesis`;
+const ACCESS_RIGHTS_VOCABULARY = VOCABULARIES.COAR_ACCESS_RIGHTS;
 
 function normalizeOrcid(orcid) {
   if (!orcid) return null;
   const value = String(orcid).trim();
   if (!value) return null;
   return value.startsWith('http') ? value : `https://orcid.org/${value}`;
+}
+
+function normalizeAuthorEmail(value) {
+  if (!value) return null;
+
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+
+  const lower = trimmed.toLowerCase();
+
+  const email = lower.startsWith('mailto:')
+    ? lower.slice('mailto:'.length).trim()
+    : lower;
+
+  if (!email || email.includes(' ')) return null;
+
+  const atIndex = email.indexOf('@');
+  if (atIndex <= 0 || atIndex !== email.lastIndexOf('@')) return null;
+
+  const domain = email.slice(atIndex + 1);
+  if (!domain.includes('.') || domain.startsWith('.') || domain.endsWith('.')) {
+    return null;
+  }
+
+  return `mailto:${email}`;
+}
+
+function resolveExplicitAccess(row) {
+  const value = row.access || row.acceso;
+
+  if (!value) return null;
+
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith('http://purl.org/coar/access_right/')) {
+    return trimmed;
+  }
+
+  return null;
 }
 
 function normalizeCategory(value) {
@@ -172,7 +213,7 @@ function buildPersonFromAuthor(author) {
     author.investigador_email1,
     author.investigador_email2,
     author.investigador_email3,
-  ].map(value => (value ? String(value).trim() : null)));
+  ].map(normalizeAuthorEmail));
 
   if (emails.length > 0) {
     person.emails = [...new Set(emails)];
@@ -226,11 +267,12 @@ function buildEditorEntryFromName(name) {
 }
 
 function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCodes = [] } = {}) {
-  const typeUri = PUBLICATION_TYPE_MAP[row.tipo_publicacion];
+  const typeUri = PUBLICATION_TYPE_MAP[row.tipo_publicacion] || PUBLICATION_TYPE_MAP.default;
   const lastModified = toISO8601(row.updated_at);
   const titleValue = row.titulo ? String(row.titulo).trim() : '';
   const language = parseLanguage(row.idioma);
   const thesisPublication = isThesisPublication(row);
+  const access = resolveExplicitAccess(row);
 
   const publication = {
     '@id': toCerifId(ENTITY_TYPE, row.id),
@@ -246,6 +288,13 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
 
   if (titleValue) {
     publication.title = filterEmpty([createTitle(titleValue, language)]);
+  }
+
+  if (access) {
+    publication.access = {
+      scheme: ACCESS_RIGHTS_VOCABULARY,
+      value: access,
+    };
   }
 
   if (lastModified) {
@@ -408,15 +457,6 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
       });
   }
 
-  if (ocdeCodes.length > 0) {
-    publication.subjects = ocdeCodes
-      .filter(Boolean)
-      .map(code => ({
-        scheme: VOCABULARIES.OCDE_FORD,
-        value: `${VOCABULARIES.OCDE_FORD}#${code}`,
-      }));
-  }
-
   if (projectIds.length > 0) {
     publication.originatesFrom = [];
 
@@ -424,12 +464,6 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
       publication.originatesFrom.push({
         project: {
           id: toCerifId('Projects', projectId),
-        },
-      });
-
-      publication.originatesFrom.push({
-        funding: {
-          id: toCerifId('Fundings', `P${projectId}`),
         },
       });
     }
