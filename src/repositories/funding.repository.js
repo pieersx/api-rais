@@ -16,7 +16,6 @@ import {
 } from '../utils/constants.js';
 
 const ENTITY_TYPE = 'Fundings';
-const FALLBACK_DATE = '2014-01-01T00:00:00Z';
 const FUNDING_APORTE_TOTAL = `
   (
     COALESCE(p.aporte_unmsm, 0)
@@ -51,18 +50,19 @@ function parseFundingProjectId(id) {
 }
 
 function buildFundingType(row) {
+  const internalAmount = Number(row.aporte_unmsm || 0);
   const externalTotal =
     Number(row.aporte_no_unmsm || 0)
     + Number(row.financiamiento_fuente_externa || 0)
     + Number(row.entidad_asociada || 0);
 
-  const value = externalTotal > 0
-    ? `${VOCABULARIES.OPENAIRE_FUNDING_TYPES}#Grant`
-    : `${VOCABULARIES.OPENAIRE_FUNDING_TYPES}#InternalFunding`;
+  if (externalTotal > 0 || internalAmount <= 0) {
+    return null;
+  }
 
   return {
     scheme: VOCABULARIES.OPENAIRE_FUNDING_TYPES,
-    value,
+    value: `${VOCABULARIES.OPENAIRE_FUNDING_TYPES}#InternalFunding`,
   };
 }
 
@@ -100,36 +100,39 @@ function buildBudgetBreakdown(row) {
 
 function mapToCerif(row) {
   const fundingId = `P${row.id}`;
-  const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
+  const lastModified = toISO8601(row.updated_at);
+  const projectTitle = String(row.titulo || '').trim();
+  const awardNumber = String(row.codigo_proyecto || '').trim();
+  const fundingType = buildFundingType(row);
 
   const funding = {
     '@id': toCerifId(ENTITY_TYPE, fundingId),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    type: buildFundingType(row),
-    title: filterEmpty([
-      createTitle(`Financiamiento de proyecto ${row.codigo_proyecto || row.id}`, 'es'),
-      row.titulo ? createTitle(row.titulo, 'es') : null,
-    ]),
-    identifiers: filterEmpty([
-      createIdentifier(
-        IDENTIFIER_SCHEMES.AWARD_NUMBER,
-        row.codigo_proyecto || `P-${row.id}`
-      ),
-    ]),
-    fundedBy: {
+    relatedProjects: [toCerifId('Projects', row.id)],
+    lastModified,
+  };
+
+  if (fundingType) {
+    funding.type = fundingType;
+  }
+
+  if (projectTitle) {
+    funding.title = [createTitle(projectTitle, 'es')];
+  }
+
+  if (awardNumber) {
+    funding.identifiers = filterEmpty([
+      createIdentifier(IDENTIFIER_SCHEMES.AWARD_NUMBER, awardNumber),
+    ]);
+  }
+
+  if (Number(row.aporte_unmsm || 0) > 0) {
+    funding.fundedBy = {
       orgUnit: {
         id: toCerifId('OrgUnits', '1'),
         acronym: 'UNMSM',
         name: 'Universidad Nacional Mayor de San Marcos',
       },
-    },
-    relatedProjects: [toCerifId('Projects', row.id)],
-    lastModified,
-  };
-
-  if (row.convocatoria) {
-    funding.partOf = {
-      id: toCerifId(ENTITY_TYPE, `C${row.convocatoria}`),
     };
   }
 
@@ -273,7 +276,7 @@ export async function getFunding({ from, until, offset = 0, limit = env.PAGE_SIZ
   return rows.map(row => ({
     header: {
       identifier: toOAIIdentifier(ENTITY_TYPE, `P${row.id}`),
-      datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
+      datestamp: toISO8601(row.updated_at),
       setSpec: 'fundings',
     },
     metadata: {
@@ -307,7 +310,7 @@ export async function getFundingHeaders({ from, until, offset = 0, limit = env.P
 
   return rows.map(row => ({
     identifier: toOAIIdentifier(ENTITY_TYPE, `P${row.id}`),
-    datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
+    datestamp: toISO8601(row.updated_at),
     setSpec: 'fundings',
   }));
 }
@@ -335,7 +338,7 @@ export async function getFundingById(id) {
   return {
     header: {
       identifier: toOAIIdentifier(ENTITY_TYPE, `P${row.id}`),
-      datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
+      datestamp: toISO8601(row.updated_at),
       setSpec: 'fundings',
     },
     metadata: {
