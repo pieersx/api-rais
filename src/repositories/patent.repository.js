@@ -16,7 +16,6 @@ import {
 } from '../utils/constants.js';
 
 const ENTITY_TYPE = 'Patents';
-const FALLBACK_DATE = '2014-01-01T00:00:00Z';
 
 function normalizeOrcid(orcid) {
   if (!orcid) return null;
@@ -25,18 +24,31 @@ function normalizeOrcid(orcid) {
   return value.startsWith('http') ? value : `https://orcid.org/${value}`;
 }
 
+function buildPatentHeader(row) {
+  const header = {
+    identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
+    setSpec: 'patents',
+  };
+
+  const datestamp = toISO8601(row.updated_at);
+  if (datestamp) {
+    header.datestamp = datestamp;
+  }
+
+  return header;
+}
+
 function mapToCerif(row, inventors = [], holders = []) {
   const typeUri = PATENT_TYPE_MAP[row.tipo] || PATENT_TYPE_MAP.default;
   const ipcClassification = inferIPCClassification(row);
-  const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
-  const titleValue = row.titulo || `Patente ${row.id}`;
+  const lastModified = toISO8601(row.updated_at);
+  const title = filterEmpty([createTitle(row.titulo, 'es')]);
+  const patentNumber = String(row.nro_registro || '').trim();
 
   const patent = {
     '@id': toCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     type: typeUri,
-    patentNumber: row.nro_registro || `PAT-${row.id}`,
-    title: filterEmpty([createTitle(titleValue, 'es')]),
     subjects: [
       {
         scheme: ipcClassification.scheme,
@@ -44,9 +56,19 @@ function mapToCerif(row, inventors = [], holders = []) {
       },
     ],
     countryCode: 'PE',
-    language: ['es'],
-    lastModified,
   };
+
+  if (patentNumber) {
+    patent.patentNumber = patentNumber;
+  }
+
+  if (title.length > 0) {
+    patent.title = title;
+  }
+
+  if (lastModified) {
+    patent.lastModified = lastModified;
+  }
 
   if (ipcClassification.note) {
     patent.notes = [ipcClassification.note];
@@ -101,7 +123,6 @@ function mapToCerif(row, inventors = [], holders = []) {
 
   patent.issuer = {
     orgUnit: {
-      id: toCerifId('OrgUnits', 'INDECOPI'),
       acronym: 'INDECOPI',
       name: 'Instituto Nacional de Defensa de la Competencia y de la Protección de la Propiedad Intelectual',
     },
@@ -220,11 +241,7 @@ export async function getPatents({ from, until, offset = 0, limit = env.PAGE_SIZ
     const context = await getPatentContext(row.id);
 
     results.push({
-      header: {
-        identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
-        datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
-        setSpec: 'patents',
-      },
+      header: buildPatentHeader(row),
       metadata: {
         Patent: mapToCerif(row, context.inventors, context.holders),
       },
@@ -256,11 +273,7 @@ export async function getPatentHeaders({ from, until, offset = 0, limit = env.PA
 
   const [rows] = await pool.query(query, [...dateFilter.params, limit, offset]);
 
-  return rows.map(row => ({
-    identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
-    datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
-    setSpec: 'patents',
-  }));
+  return rows.map(row => buildPatentHeader(row));
 }
 
 /**
@@ -287,11 +300,7 @@ export async function getPatentById(id) {
   const context = await getPatentContext(row.id);
 
   return {
-    header: {
-      identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
-      datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
-      setSpec: 'patents',
-    },
+    header: buildPatentHeader(row),
     metadata: {
       Patent: mapToCerif(row, context.inventors, context.holders),
     },

@@ -17,7 +17,6 @@ import {
 } from '../utils/constants.js';
 
 const ENTITY_TYPE = 'Persons';
-const FALLBACK_DATE = '2014-01-01T00:00:00Z';
 
 function normalizeOrcid(orcid) {
   if (!orcid) return null;
@@ -26,30 +25,132 @@ function normalizeOrcid(orcid) {
   return value.startsWith('http') ? value : `https://orcid.org/${value}`;
 }
 
+function normalizeEmail(value) {
+  if (!value) return null;
+
+  const trimmed = String(value).trim().toLowerCase();
+  if (!trimmed || trimmed.includes(' ')) return null;
+
+  const atIndex = trimmed.indexOf('@');
+  if (atIndex <= 0 || atIndex !== trimmed.lastIndexOf('@')) return null;
+
+  const domain = trimmed.slice(atIndex + 1);
+  if (!domain.includes('.') || domain.startsWith('.') || domain.endsWith('.')) {
+    return null;
+  }
+
+  return trimmed;
+}
+
+function normalizePhone(value) {
+  if (!value) return null;
+
+  const trimmed = String(value).trim();
+  if (!trimmed || /[A-Za-z@]/.test(trimmed)) return null;
+  if (!/^\+?[0-9\s\-()]+$/.test(trimmed)) return null;
+
+  const compact = trimmed.replace(/[()\s-]+/g, '');
+  const digits = compact.startsWith('+') ? compact.slice(1) : compact;
+
+  if (!/^\d{6,}$/.test(digits)) return null;
+
+  return compact.startsWith('+') ? `+${digits}` : digits;
+}
+
+function normalizeUrl(value) {
+  if (!value) return null;
+
+  const trimmed = String(value).trim();
+  if (!trimmed || /\s/.test(trimmed)) return null;
+
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return null;
+    }
+
+    if (!url.hostname) return null;
+
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function normalizeWebLikeValue(value) {
+  if (!value) return null;
+
+  const trimmed = String(value).trim();
+  if (!trimmed || /\s/.test(trimmed) || trimmed.includes('@')) return null;
+
+  if (!/^(?:www\.)?[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:[/?#][^\s]*)?$/.test(trimmed)) {
+    return null;
+  }
+
+  return `https://${trimmed}`;
+}
+
 function normalizeContact(value) {
   if (!value) return null;
 
   const trimmed = String(value).trim();
   if (!trimmed) return null;
 
-  if (trimmed.startsWith('mailto:') || trimmed.startsWith('tel:') || trimmed.startsWith('https://')) {
-    return trimmed;
+  const lowerTrimmed = trimmed.toLowerCase();
+
+  if (lowerTrimmed.startsWith('mailto:')) {
+    const email = normalizeEmail(trimmed.slice('mailto:'.length));
+    return email ? `mailto:${email}` : null;
   }
 
-  if (trimmed.startsWith('http://')) {
-    return trimmed.replace('http://', 'https://');
+  const email = normalizeEmail(trimmed);
+  if (email) {
+    return `mailto:${email}`;
   }
 
-  if (/^\+?[0-9\s\-()]{6,}$/.test(trimmed)) {
-    const compact = trimmed.replace(/\s+/g, '');
-    return `tel:${compact}`;
+  if (lowerTrimmed.startsWith('tel:')) {
+    const phone = normalizePhone(trimmed.slice('tel:'.length));
+    return phone ? `tel:${phone}` : null;
   }
 
-  if (trimmed.includes('@')) {
-    return `mailto:${trimmed.toLowerCase()}`;
+  const phone = normalizePhone(trimmed);
+  if (phone) {
+    return `tel:${phone}`;
   }
 
-  return `https://${trimmed}`;
+  const explicitUrl = normalizeUrl(trimmed);
+  if (explicitUrl) {
+    return explicitUrl;
+  }
+
+  return normalizeWebLikeValue(trimmed);
+}
+
+function buildAffiliationContext(row) {
+  if (!row.facultad_id && !row.instituto_id) {
+    return null;
+  }
+
+  return {
+    id: row.facultad_id,
+    nombre: row.facultad_nombre,
+    instituto_id: row.instituto_id,
+    instituto_nombre: row.instituto_nombre,
+  };
+}
+
+function buildPersonHeader(row) {
+  const header = {
+    identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
+    setSpec: 'persons',
+  };
+
+  const datestamp = toISO8601(row.updated_at);
+  if (datestamp) {
+    header.datestamp = datestamp;
+  }
+
+  return header;
 }
 
 /**
@@ -59,10 +160,13 @@ function normalizeContact(value) {
  * @returns {object}
  */
 function mapToCerif(row, affiliation = null) {
-  const fullName = formatFullName(row.nombres, row.apellido1, row.apellido2) || `Investigador ${row.id}`;
+  const documentType = String(row.doc_tipo || '').trim().toUpperCase();
+  const fullName = formatFullName(row.nombres, row.apellido1, row.apellido2) || null;
+  const familyNames = formatFamilyNames(row.apellido1, row.apellido2) || null;
+  const firstNames = String(row.nombres || '').trim() || null;
 
   const identifiers = filterEmpty([
-    row.doc_tipo === 'DNI' && /^\d{8}$/.test(String(row.doc_numero || '').trim())
+    documentType === 'DNI' && /^\d{8}$/.test(String(row.doc_numero || '').trim())
       ? createIdentifier(IDENTIFIER_SCHEMES.DNI, row.doc_numero)
       : null,
     row.codigo_orcid
@@ -76,17 +180,18 @@ function mapToCerif(row, affiliation = null) {
       : null,
   ]);
 
-  const emails = filterEmpty([row.email1, row.email2, row.email3].map(normalizeContact));
+  const emails = [...new Set(filterEmpty([row.email1, row.email2, row.email3].map(normalizeContact)))];
 
   const affiliations = [];
   if (affiliation) {
-    affiliations.push({
-      orgUnit: {
-        id: toCerifId('OrgUnits', `F${affiliation.id}`),
-        name: affiliation.nombre,
-      },
-      role: 'Investigador',
-    });
+    if (affiliation.id && affiliation.nombre) {
+      affiliations.push({
+        orgUnit: {
+          id: toCerifId('OrgUnits', `F${affiliation.id}`),
+          name: affiliation.nombre,
+        },
+      });
+    }
 
     if (affiliation.instituto_id && affiliation.instituto_nombre) {
       affiliations.push({
@@ -94,21 +199,31 @@ function mapToCerif(row, affiliation = null) {
           id: toCerifId('OrgUnits', `I${affiliation.instituto_id}`),
           name: affiliation.instituto_nombre,
         },
-        role: 'Investigador',
       });
     }
+  }
+
+  const personName = {};
+  if (familyNames) {
+    personName.familyNames = familyNames;
+  }
+  if (firstNames) {
+    personName.firstNames = firstNames;
+  }
+  if (fullName) {
+    personName.fullName = fullName;
   }
 
   const person = {
     '@id': toCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    personName: {
-      familyNames: formatFamilyNames(row.apellido1, row.apellido2),
-      firstNames: row.nombres || fullName,
-      fullName,
-    },
-    lastModified: toISO8601(row.updated_at) || FALLBACK_DATE,
+    personName,
   };
+
+  const lastModified = toISO8601(row.updated_at);
+  if (lastModified) {
+    person.lastModified = lastModified;
+  }
 
   // Solo agregar campos con valores
   if (row.sexo && GENDER_MAP[row.sexo]) {
@@ -187,23 +302,9 @@ export async function getPersons({ from, until, offset = 0, limit = env.PAGE_SIZ
   const [rows] = await pool.query(query, params);
 
   return rows.map(row => ({
-    header: {
-      identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
-      datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
-      setSpec: 'persons',
-    },
+    header: buildPersonHeader(row),
     metadata: {
-      Person: mapToCerif(
-        row,
-        row.facultad_id
-          ? {
-              id: row.facultad_id,
-              nombre: row.facultad_nombre,
-              instituto_id: row.instituto_id,
-              instituto_nombre: row.instituto_nombre,
-            }
-          : null
-      ),
+      Person: mapToCerif(row, buildAffiliationContext(row)),
     },
   }));
 }
@@ -231,11 +332,7 @@ export async function getPersonHeaders({ from, until, offset = 0, limit = env.PA
   const params = [...dateFilter.params, limit, offset];
   const [rows] = await pool.query(query, params);
 
-  return rows.map(row => ({
-    identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
-    datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
-    setSpec: 'persons',
-  }));
+  return rows.map(row => buildPersonHeader(row));
 }
 
 /**
@@ -265,23 +362,9 @@ export async function getPersonById(id) {
 
   const row = rows[0];
   return {
-    header: {
-      identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
-      datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
-      setSpec: 'persons',
-    },
+    header: buildPersonHeader(row),
     metadata: {
-      Person: mapToCerif(
-        row,
-        row.facultad_id
-          ? {
-              id: row.facultad_id,
-              nombre: row.facultad_nombre,
-              instituto_id: row.instituto_id,
-              instituto_nombre: row.instituto_nombre,
-            }
-          : null
-      ),
+      Person: mapToCerif(row, buildAffiliationContext(row)),
     },
   };
 }
