@@ -19,6 +19,58 @@ import {
 const ENTITY_TYPE = 'OrgUnits';
 const FALLBACK_DATE = '2014-01-01T00:00:00Z';
 
+function normalizeRorValue(value) {
+  if (!value) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('http')) {
+    try {
+      const url = new URL(trimmed);
+      const parts = url.pathname.split('/').filter(Boolean);
+      return parts[parts.length - 1] || null;
+    } catch {
+      return trimmed;
+    }
+  }
+  return trimmed;
+}
+
+function normalizeIsniValue(value) {
+  if (!value) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/\s+/g, '');
+}
+
+function normalizeUrlValue(value) {
+  if (!value) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    try {
+      new URL(trimmed);
+      return trimmed;
+    } catch {
+      return null;
+    }
+  }
+  if (trimmed.startsWith('www.')) {
+    return `https://${trimmed}`;
+  }
+  return null;
+}
+
+function normalizeEmailValue(value) {
+  if (!value) return null;
+  const trimmed = String(value).trim().toLowerCase();
+  if (!trimmed) return null;
+  const atIndex = trimmed.indexOf('@');
+  if (atIndex <= 0 || atIndex !== trimmed.lastIndexOf('@')) return null;
+  const domain = trimmed.slice(atIndex + 1);
+  if (!domain.includes('.') || domain.startsWith('.') || domain.endsWith('.')) return null;
+  return `mailto:${trimmed}`;
+}
+
 // Hardcoded: UNMSM como organizacion raiz
 const UNMSM_ROOT = {
   id: 1,
@@ -72,10 +124,10 @@ function createRootOrgUnitRecord() {
         lastModified: FALLBACK_DATE,
         identifiers: filterEmpty([
           createIdentifier(IDENTIFIER_SCHEMES.RUC, UNMSM_ROOT.ruc),
-          createIdentifier(IDENTIFIER_SCHEMES.ROR, UNMSM_ROOT.ror),
-          createIdentifier(IDENTIFIER_SCHEMES.ISNI, UNMSM_ROOT.isni),
+          createIdentifier('https://w3id.org/cerif/vocab/IdentifierTypes#RORID', normalizeRorValue(UNMSM_ROOT.ror)),
+          createIdentifier('https://w3id.org/cerif/vocab/IdentifierTypes#ISNI', normalizeIsniValue(UNMSM_ROOT.isni)),
           createIdentifier(IDENTIFIER_SCHEMES.GRID, UNMSM_ROOT.grid),
-          createIdentifier('http://purl.org/pe-repo/concytec/scopus/affiliationId', UNMSM_ROOT.scopusAffiliationId),
+          createIdentifier('https://w3id.org/cerif/vocab/IdentifierTypes#ScopusAffiliationID', UNMSM_ROOT.scopusAffiliationId),
         ]),
         countryCode: UNMSM_ROOT.countryCode,
         classifications: filterEmpty([
@@ -217,10 +269,16 @@ function mapGrupoToCerif(row) {
 
   const websites = [];
   if (row.web) {
-    websites.push({ type: 'homepage', url: row.web });
+    const normalizedWeb = normalizeUrlValue(row.web);
+    if (normalizedWeb) {
+      websites.push({ type: 'homepage', url: normalizedWeb });
+    }
   }
   if (row.email) {
-    websites.push({ type: 'email', url: `mailto:${String(row.email).trim().toLowerCase()}` });
+    const normalizedEmail = normalizeEmailValue(row.email);
+    if (normalizedEmail) {
+      websites.push({ type: 'email', url: normalizedEmail });
+    }
   }
   if (websites.length > 0) {
     orgUnit.websites = websites;
