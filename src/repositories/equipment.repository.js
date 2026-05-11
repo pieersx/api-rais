@@ -16,70 +16,124 @@ import {
 
 const ENTITY_TYPE = 'Equipments';
 const FALLBACK_DATE = '2014-01-01T00:00:00Z';
-const CTI_TERMS_SCHEME = 'https://purl.org/pe-repo/concytec/terminos';
+const ROOT_ORGUNIT_ID = toCerifId('OrgUnits', '1');
+const ROOT_ORGUNIT_NAME = 'Universidad Nacional Mayor de San Marcos';
+const EQUIPMENT_TYPE_SCHEME = 'https://purl.org/pe-repo/concytec/equipamiento';
+const EQUIPMENT_TYPE_MAP = new Map([
+  ['cromatografos', `${EQUIPMENT_TYPE_SCHEME}#cromatografos`],
+]);
 
-function toSlug(value) {
+function normalizeText(value) {
   return String(value || '')
     .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    || null;
+}
+
+function normalizeCategoryKey(value) {
+  const normalized = normalizeText(value);
+  if (!normalized) return null;
+
+  return normalized
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase();
 }
 
 function getEquipmentType(row) {
-  const slug = toSlug(row.categoria);
-  if (!slug) {
-    return `${CTI_TERMS_SCHEME}#equipamiento-cientifico`;
+  const categoria = normalizeText(row.categoria);
+  if (!categoria) {
+    return null;
   }
-  return `${CTI_TERMS_SCHEME}#${slug}`;
+
+  if (categoria.startsWith(`${EQUIPMENT_TYPE_SCHEME}#`)) {
+    return categoria;
+  }
+
+  const categoryKey = normalizeCategoryKey(categoria);
+  if (!categoryKey) {
+    return null;
+  }
+
+  return EQUIPMENT_TYPE_MAP.get(categoryKey) || null;
+}
+
+function buildOwner(row) {
+  const ownerGroupId = normalizeText(row.owner_group_id);
+  const ownerGroupName = normalizeText(row.owner_group_name);
+
+  if (ownerGroupId) {
+    const owner = {
+      orgUnit: {
+        id: toCerifId('OrgUnits', `G${ownerGroupId}`),
+      },
+    };
+
+    if (ownerGroupName) {
+      owner.orgUnit.name = ownerGroupName;
+    }
+
+    return owner;
+  }
+
+  return {
+    orgUnit: {
+      id: ROOT_ORGUNIT_ID,
+      name: ROOT_ORGUNIT_NAME,
+    },
+  };
 }
 
 function mapToCerif(row) {
   const equipmentId = toCerifId(ENTITY_TYPE, row.id);
   const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
+  const codigo = normalizeText(row.codigo);
+  const nombre = normalizeText(row.nombre);
+  const descripcion = normalizeText(row.descripcion);
+  const ubicacion = normalizeText(row.ubicacion);
+  const contacto = normalizeText(row.contacto);
+  const type = getEquipmentType(row);
 
   const equipment = {
     '@id': equipmentId,
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    identifiers: filterEmpty([
-      createIdentifier(IDENTIFIER_SCHEMES.CRIS_ID, row.codigo || `GI-${row.id}`),
-    ]),
-    type: getEquipmentType(row),
-    name: filterEmpty([
-      createTitle(row.nombre || `Equipamiento ${row.id}`, 'es'),
-    ]),
-    owner: {
-      orgUnit: {
-        id: row.grupo_id ? toCerifId('OrgUnits', `G${row.grupo_id}`) : toCerifId('OrgUnits', '1'),
-        name: row.grupo_nombre || 'Universidad Nacional Mayor de San Marcos',
-      },
-    },
+    owner: buildOwner(row),
     lastModified,
   };
 
-  if (row.descripcion) {
+  const identifiers = filterEmpty([
+    createIdentifier(IDENTIFIER_SCHEMES.CRIS_ID, codigo),
+  ]);
+  if (identifiers.length > 0) {
+    equipment.identifiers = identifiers;
+  }
+
+  if (type) {
+    equipment.type = type;
+  }
+
+  const names = filterEmpty([
+    createTitle(nombre, 'es'),
+  ]);
+  if (names.length > 0) {
+    equipment.name = names;
+  }
+
+  if (descripcion) {
     equipment.description = [{
       lang: 'es',
-      value: row.descripcion,
+      value: descripcion,
     }];
   }
 
-  if (row.ubicacion) {
+  if (ubicacion) {
     equipment.location = {
-      campus: row.ubicacion,
+      campus: ubicacion,
     };
   }
 
-  if (row.valor_estimado && Number(row.valor_estimado) > 0) {
-    equipment.acquisitionAmount = {
-      value: Math.round(Number(row.valor_estimado)),
-      currency: 'PEN',
-    };
-  }
-
-  if (row.contacto) {
+  if (contacto) {
     equipment.contact = {
-      value: row.contacto,
+      value: contacto,
     };
   }
 
@@ -126,7 +180,8 @@ export async function getEquipment({ from, until, offset = 0, limit = env.PAGE_S
       gi.nombre,
       gi.descripcion,
       gi.grupo_id,
-      g.grupo_nombre,
+      CASE WHEN g.estado = 4 THEN g.id ELSE NULL END AS owner_group_id,
+      CASE WHEN g.estado = 4 THEN g.grupo_nombre ELSE NULL END AS owner_group_name,
       gi.categoria,
       gi.ubicacion,
       gi.valor_estimado,
@@ -197,7 +252,8 @@ export async function getEquipmentById(id) {
         gi.nombre,
         gi.descripcion,
         gi.grupo_id,
-        g.grupo_nombre,
+        CASE WHEN g.estado = 4 THEN g.id ELSE NULL END AS owner_group_id,
+        CASE WHEN g.estado = 4 THEN g.grupo_nombre ELSE NULL END AS owner_group_name,
         gi.categoria,
         gi.ubicacion,
         gi.valor_estimado,
