@@ -150,6 +150,70 @@ export function createTypedIdentifier(type, value) {
 }
 
 /**
+ * Normaliza ORCID al formato canónico 0000-0000-0000-000X
+ * @param {string} value
+ * @returns {string | null}
+ */
+export function normalizeOrcidToken(value) {
+  if (!value) return null;
+
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+
+  const withoutPrefix = trimmed
+    .replace(/^https?:\/\/orcid\.org\//i, '')
+    .replace(/^orcid:\s*/i, '')
+    .replace(/\s+/g, '')
+    .toUpperCase();
+
+  const compact = withoutPrefix.replace(/-/g, '');
+  if (!/^\d{15}[\dX]$/.test(compact)) return null;
+
+  return `${compact.slice(0, 4)}-${compact.slice(4, 8)}-${compact.slice(8, 12)}-${compact.slice(12)}`;
+}
+
+/**
+ * Crea un objeto { Scheme, Value }
+ * @param {string} scheme
+ * @param {string|number} value
+ * @returns {{ Scheme: string, Value: string } | null}
+ */
+export function createSchemeValueEntry(scheme, value) {
+  if (!scheme || value === null || value === undefined) return null;
+
+  const normalized = String(value).trim();
+  if (!normalized || normalized === '0') return null;
+
+  return {
+    Scheme: scheme,
+    Value: normalized,
+  };
+}
+
+/**
+ * Crea un objeto multilenguaje { Lang?, Value }
+ * @param {string} value
+ * @param {string|null} lang
+ * @returns {{ Lang?: string, Value: string } | null}
+ */
+export function createTextValueEntry(value, lang = null) {
+  if (!value) return null;
+
+  const normalized = String(value).trim();
+  if (!normalized) return null;
+
+  const entry = {
+    Value: normalized,
+  };
+
+  if (lang) {
+    entry.Lang = lang;
+  }
+
+  return entry;
+}
+
+/**
  * Mapea el setSpec a la configuracion de entidad
  * @param {string} setSpec
  * @returns {{ entityType: string, table: string }}

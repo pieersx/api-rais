@@ -100,6 +100,8 @@ export const IDENTIFIER_SCHEMES = {
 export const VOCABULARIES = {
   // Campos OCDE
   OCDE_FORD: 'https://purl.org/pe-repo/ocde/ford',
+  OCDE_PROJECT_TYPES: 'https://purl.org/pe-repo/ocde/tipoProyecto',
+  OCDE_OCCUPATION_TYPES: 'https://purl.org/pe-repo/ocde/tipoOcupacion',
 
   // Tipos de publicacion COAR
   COAR_PUBLICATION_TYPES: 'https://www.openaire.eu/cerif-profile/vocab/COAR_Publication_Types',
@@ -123,11 +125,25 @@ export const VOCABULARIES = {
   // Access Rights COAR
   COAR_ACCESS_RIGHTS: 'http://purl.org/coar/access_right',
 
+  // OrgUnits PeruCRIS
+  ORGUNIT_UBIGEO: 'https://purl.org/pe-repo/inei/ubigeo',
+  ORGUNIT_CIIU: 'https://purl.org/pe-repo/inei/ciiu',
+  ORGUNIT_SUBTYPE: 'https://purl.org/pe-repo/concytec/tipoSubunidad',
+  ORGUNIT_SECTOR_INSTITUTIONAL: 'https://purl.org/pe-repo/ocde/sectorInstitucional',
+  ORGUNIT_HIGHER_EDUCATION_TYPE: 'https://purl.org/pe-repo/sunedu/tipoInstitucion',
+  ORGUNIT_NATURE: 'https://purl.org/pe-repo/ocde/naturalezaInstitucion',
+
   // Patente COAR
   COAR_PATENT: 'http://purl.org/coar/resource_type/9DKX-KSAF',
 
   // Funding types
   OPENAIRE_FUNDING_TYPES: 'https://www.openaire.eu/cerif-profile/vocab/OpenAIRE_Funding_Types',
+
+  // Equipamientos CONCYTEC
+  CONCYTEC_EQUIPMENT_TYPES: 'https://purl.org/pe-repo/concytec/equipamiento',
+
+  // Estado de proyecto CONCYTEC
+  CONCYTEC_PROJECT_STATUS: 'https://purl.org/pe-repo/concytec/estadoProyecto',
 };
 
 // Mapeo de tipos de publicacion a URIs COAR
@@ -255,6 +271,12 @@ export const PROJECT_STATUS = {
   0: 'http://purl.org/cerif/vocab/ProjectStatus#Cancelled',
 };
 
+export const CONCYTEC_PROJECT_STATUS_MAP = {
+  0: `${VOCABULARIES.CONCYTEC_PROJECT_STATUS}#suspendido`,
+  1: `${VOCABULARIES.CONCYTEC_PROJECT_STATUS}#activo`,
+  2: `${VOCABULARIES.CONCYTEC_PROJECT_STATUS}#concluido`,
+};
+
 export const PROJECT_TYPE_OCDE_MAP = {
   PCONFIGI: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionAplicada',
   'PCONFIGI-INV': 'https://purl.org/pe-repo/ocde/tipoProyecto#innovacionTecnologica',
@@ -271,6 +293,80 @@ export const PROJECT_TYPE_OCDE_MAP = {
   PTPDOCTO: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionAplicada',
   PTPBACHILLER: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionAplicada',
 };
+
+export const PROJECT_TYPE_CONCYTEC_MAP = {
+  ECI: 'http://purl.org/pe-repo/concytec/terminos#equipamientoCientifico',
+};
+
+export const ORGUNIT_TYPE_VALUES = {
+  ROOT: 'Institución principal',
+  DEPENDENCY: 'Dependencia',
+};
+
+export const ORGUNIT_SUBTYPE_VALUES = {
+  RESEARCH_UNIT: `${VOCABULARIES.ORGUNIT_SUBTYPE}#unidadDeInvestigacionOInnovacion`,
+  RESEARCH_GROUP: `${VOCABULARIES.ORGUNIT_SUBTYPE}#grupoDeInvestigacion`,
+  RESEARCH_LINE: `${VOCABULARIES.ORGUNIT_SUBTYPE}#lineaDeInvestigacion`,
+};
+
+export const UNMSM_ORGUNIT_TYPED_VALUES = {
+  SECTOR: `${VOCABULARIES.ORGUNIT_SECTOR_INSTITUTIONAL}#ensenanzaSuperior`,
+  HIGHER_EDUCATION: `${VOCABULARIES.ORGUNIT_HIGHER_EDUCATION_TYPE}#06`,
+  NATURE: `${VOCABULARIES.ORGUNIT_NATURE}#publica`,
+};
+
+export const FUNDING_TYPE_VALUES = {
+  PROGRAMME: `${VOCABULARIES.OPENAIRE_FUNDING_TYPES}#FundingProgramme`,
+  CALL: `${VOCABULARIES.OPENAIRE_FUNDING_TYPES}#Call`,
+  GRANT: `${VOCABULARIES.OPENAIRE_FUNDING_TYPES}#Grant`,
+  INTERNAL: `${VOCABULARIES.OPENAIRE_FUNDING_TYPES}#InternalFunding`,
+};
+
+export const EQUIPMENT_TYPE_KEYWORDS = [
+  ['centrif', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#centrifugadoras`],
+  ['computadora', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#computadorasDeAltoDesempeno`],
+  ['servidor', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#computadorasDeAltoDesempeno`],
+  ['cromatograf', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#cromatografos`],
+  ['drone', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#drones`],
+  ['gps', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#equiposDeGPS`],
+  ['ecogra', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#equiposDeImagenesMedicas`],
+  ['tomogra', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#equiposDeImagenesMedicas`],
+  ['resonancia', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#equiposDeImagenesMedicas`],
+  ['rayos x', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#equiposDeRayosX`],
+  ['difract', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#equiposDeRayosX`],
+  ['fluorescencia', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#equiposDeRayosX`],
+  ['espectrom', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#espectrometros`],
+  ['microscop', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#microscopios`],
+  ['radar', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#radares`],
+  ['refriger', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#refrigeradores`],
+  ['congelador', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#refrigeradores`],
+  ['freezer', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#refrigeradores`],
+  ['transceptor', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#transceptores`],
+  ['radio', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#transceptores`],
+  ['pcr', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`],
+  ['secuenci', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`],
+  ['citomet', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`],
+  ['bioseguridad', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`],
+  ['laminar', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`],
+  ['materiales', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#equiposDeProcesamientoyEnsayoDeMateriales`],
+  ['molienda', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#equiposDeProcesamientoyEnsayoDeMateriales`],
+  ['horno', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#equiposDeProcesamientoyEnsayoDeMateriales`],
+];
+
+export const PROJECT_MEMBER_OCCUPATION_RULES = [
+  ['tesista', `${VOCABULARIES.OCDE_OCCUPATION_TYPES}#investigadorOInnovadorMiembro`],
+  ['asesor', `${VOCABULARIES.OCDE_OCCUPATION_TYPES}#investigadorOInnovadorMiembro`],
+  ['co-investigador', `${VOCABULARIES.OCDE_OCCUPATION_TYPES}#investigadorOInnovadorMiembro`],
+  ['coinvestigador', `${VOCABULARIES.OCDE_OCCUPATION_TYPES}#investigadorOInnovadorMiembro`],
+  ['colaborador', `${VOCABULARIES.OCDE_OCCUPATION_TYPES}#investigadorOInnovadorMiembro`],
+  ['miembro', `${VOCABULARIES.OCDE_OCCUPATION_TYPES}#investigadorOInnovadorMiembro`],
+  ['responsable', `${VOCABULARIES.OCDE_OCCUPATION_TYPES}#investigadorOInnovadorMiembro`],
+  ['co responsable', `${VOCABULARIES.OCDE_OCCUPATION_TYPES}#investigadorOInnovadorMiembro`],
+  ['coordinador', `${VOCABULARIES.OCDE_OCCUPATION_TYPES}#investigadorOInnovadorMiembro`],
+  ['tecnico', `${VOCABULARIES.OCDE_OCCUPATION_TYPES}#tecnicosYPersonalEquivalente`],
+  ['auxiliar', `${VOCABULARIES.OCDE_OCCUPATION_TYPES}#personalAuxiliarODeApoyo`],
+  ['apoyo', `${VOCABULARIES.OCDE_OCCUPATION_TYPES}#personalAuxiliarODeApoyo`],
+];
 
 // Codigos de error OAI-PMH
 export const OAI_ERRORS = {

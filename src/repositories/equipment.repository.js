@@ -5,23 +5,22 @@ import {
   toCerifId,
   toISO8601,
   filterEmpty,
-  createTitle,
-  createIdentifier,
   buildDateFilter,
+  createSchemeValueEntry,
+  createTextValueEntry,
 } from '../utils/formatters.js';
 import {
+  EQUIPMENT_TYPE_KEYWORDS,
   IDENTIFIER_SCHEMES,
   NAMESPACES,
+  VOCABULARIES,
 } from '../utils/constants.js';
 
 const ENTITY_TYPE = 'Equipments';
 const FALLBACK_DATE = '2014-01-01T00:00:00Z';
 const ROOT_ORGUNIT_ID = toCerifId('OrgUnits', '1');
 const ROOT_ORGUNIT_NAME = 'Universidad Nacional Mayor de San Marcos';
-const EQUIPMENT_TYPE_SCHEME = 'https://purl.org/pe-repo/concytec/equipamiento';
-const EQUIPMENT_TYPE_MAP = new Map([
-  ['cromatografos', `${EQUIPMENT_TYPE_SCHEME}#cromatografos`],
-]);
+const EQUIPMENT_TYPE_SCHEME = VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES;
 
 function normalizeText(value) {
   return String(value || '')
@@ -41,20 +40,22 @@ function normalizeCategoryKey(value) {
 
 function getEquipmentType(row) {
   const categoria = normalizeText(row.categoria);
-  if (!categoria) {
-    return null;
-  }
+  const searchableText = [row.categoria, row.nombre, row.descripcion, row.ubicacion]
+    .map(normalizeCategoryKey)
+    .filter(Boolean)
+    .join(' ');
 
-  if (categoria.startsWith(`${EQUIPMENT_TYPE_SCHEME}#`)) {
+  if (categoria?.startsWith(`${EQUIPMENT_TYPE_SCHEME}#`)) {
     return categoria;
   }
 
-  const categoryKey = normalizeCategoryKey(categoria);
-  if (!categoryKey) {
-    return null;
+  for (const [keyword, uri] of EQUIPMENT_TYPE_KEYWORDS) {
+    if (searchableText.includes(keyword)) {
+      return uri;
+    }
   }
 
-  return EQUIPMENT_TYPE_MAP.get(categoryKey) || null;
+  return `${EQUIPMENT_TYPE_SCHEME}#otrosEquipamientos`;
 }
 
 function buildOwner(row) {
@@ -63,20 +64,20 @@ function buildOwner(row) {
 
   if (ownerGroupId) {
     const owner = {
-      orgUnit: {
+      OrgUnit: {
         id: toCerifId('OrgUnits', `G${ownerGroupId}`),
       },
     };
 
     if (ownerGroupName) {
-      owner.orgUnit.name = ownerGroupName;
+      owner.OrgUnit.name = ownerGroupName;
     }
 
     return owner;
   }
 
   return {
-    orgUnit: {
+    OrgUnit: {
       id: ROOT_ORGUNIT_ID,
       name: ROOT_ORGUNIT_NAME,
     },
@@ -96,49 +97,50 @@ function mapToCerif(row) {
   const equipment = {
     '@id': equipmentId,
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    owner: buildOwner(row),
-    lastModified,
+    Owner: buildOwner(row),
+    LastModified: lastModified,
   };
 
   const identifiers = filterEmpty([
-    createIdentifier(IDENTIFIER_SCHEMES.CRIS_ID, codigo),
+    createSchemeValueEntry(IDENTIFIER_SCHEMES.CRIS_ID, codigo || row.id),
   ]);
   if (identifiers.length > 0) {
-    equipment.identifiers = identifiers;
+    equipment.Identifier = identifiers;
   }
 
   if (type) {
-    equipment.type = type;
-  }
-
-  const names = filterEmpty([
-    createTitle(nombre, 'es'),
-  ]);
-  if (names.length > 0) {
-    equipment.name = names;
-  }
-
-  if (descripcion) {
-    equipment.description = [{
-      lang: 'es',
-      value: descripcion,
-    }];
-  }
-
-  if (ubicacion) {
-    equipment.location = {
-      campus: ubicacion,
+    equipment.Type = {
+      Scheme: EQUIPMENT_TYPE_SCHEME,
+      Value: type,
     };
   }
 
+  const names = filterEmpty([
+    createTextValueEntry(nombre || `Equipamiento ${row.id}`, 'es'),
+  ]);
+  if (names.length > 0) {
+    equipment.Name = names;
+  }
+
+  const descriptionParts = [];
+  if (descripcion) descriptionParts.push(descripcion);
+  if (ubicacion) descriptionParts.push(`Ubicación: ${ubicacion}`);
+  if (contacto) descriptionParts.push(`Contacto: ${contacto}`);
+
+  if (descriptionParts.length > 0) {
+    equipment.Description = filterEmpty([
+      createTextValueEntry(descriptionParts.join('. '), 'es'),
+    ]);
+  }
+
   if (contacto) {
-    equipment.contact = {
+    equipment.Contact = {
       value: contacto,
     };
   }
 
   if (row.area_mt2 && Number(row.area_mt2) > 0) {
-    equipment.area = {
+    equipment.Area = {
       value: Number(row.area_mt2),
       unit: 'm2',
     };
@@ -155,7 +157,11 @@ function mapToCerif(row) {
  */
 export async function countEquipment(from, until) {
   const dateFilter = buildDateFilter(from, until, 'gi.updated_at');
-  let query = 'SELECT COUNT(*) as total FROM Grupo_infraestructura gi WHERE gi.id IS NOT NULL';
+  let query = `
+    SELECT COUNT(*) as total
+    FROM Grupo_infraestructura gi
+    WHERE LOWER(TRIM(gi.categoria)) = 'equipo'
+  `;
 
   if (dateFilter.clause) {
     query += ` AND ${dateFilter.clause}`;
@@ -190,7 +196,7 @@ export async function getEquipment({ from, until, offset = 0, limit = env.PAGE_S
       gi.updated_at
     FROM Grupo_infraestructura gi
     LEFT JOIN Grupo g ON gi.grupo_id = g.id
-    WHERE gi.id IS NOT NULL
+    WHERE LOWER(TRIM(gi.categoria)) = 'equipo'
   `;
 
   if (dateFilter.clause) {
@@ -221,7 +227,11 @@ export async function getEquipment({ from, until, offset = 0, limit = env.PAGE_S
 export async function getEquipmentHeaders({ from, until, offset = 0, limit = env.PAGE_SIZE }) {
   const dateFilter = buildDateFilter(from, until, 'gi.updated_at');
 
-  let query = 'SELECT gi.id, gi.updated_at FROM Grupo_infraestructura gi WHERE gi.id IS NOT NULL';
+  let query = `
+    SELECT gi.id, gi.updated_at
+    FROM Grupo_infraestructura gi
+    WHERE LOWER(TRIM(gi.categoria)) = 'equipo'
+  `;
 
   if (dateFilter.clause) {
     query += ` AND ${dateFilter.clause}`;
@@ -263,6 +273,7 @@ export async function getEquipmentById(id) {
       FROM Grupo_infraestructura gi
       LEFT JOIN Grupo g ON gi.grupo_id = g.id
       WHERE gi.id = ?
+        AND LOWER(TRIM(gi.categoria)) = 'equipo'
     `,
     [id]
   );

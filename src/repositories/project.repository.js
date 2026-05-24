@@ -5,22 +5,24 @@ import {
   toCerifId,
   toISO8601,
   filterEmpty,
-  createTitle,
-  createIdentifier,
   buildDateFilter,
+  createSchemeValueEntry,
+  createTextValueEntry,
 } from '../utils/formatters.js';
 import {
+  CONCYTEC_PROJECT_STATUS_MAP,
   IDENTIFIER_SCHEMES,
+  PROJECT_MEMBER_OCCUPATION_RULES,
+  PROJECT_TYPE_CONCYTEC_MAP,
   PROJECT_TYPE_OCDE_MAP,
   VOCABULARIES,
   NAMESPACES,
 } from '../utils/constants.js';
 
 const ENTITY_TYPE = 'Projects';
-const OCDE_PROJECT_TYPE_SCHEME = 'https://purl.org/pe-repo/ocde/tipoProyecto';
-const PROJECT_STATUS_MAP = {
-  1: 'https://purl.org/pe-repo/concytec/estadoProyecto#activo',
-  2: 'https://purl.org/pe-repo/concytec/estadoProyecto#concluido',
+const ROOT_ORGUNIT = {
+  id: toCerifId('OrgUnits', '1'),
+  name: 'Universidad Nacional Mayor de San Marcos',
 };
 
 function getProjectTypes(row) {
@@ -34,8 +36,16 @@ function getProjectTypes(row) {
   const ocdeType = PROJECT_TYPE_OCDE_MAP[projectType];
   if (ocdeType) {
     types.push({
-      scheme: OCDE_PROJECT_TYPE_SCHEME,
-      value: ocdeType,
+      Scheme: VOCABULARIES.OCDE_PROJECT_TYPES,
+      Value: ocdeType,
+    });
+  }
+
+  const concytecType = PROJECT_TYPE_CONCYTEC_MAP[projectType];
+  if (concytecType) {
+    types.push({
+      Scheme: 'http://purl.org/pe-repo/concytec/terminos',
+      Value: concytecType,
     });
   }
 
@@ -57,141 +67,257 @@ function buildParticipantRole(integrante) {
   return rawRole || null;
 }
 
-function buildParticipants(integrantes) {
-  const participants = [];
+function normalizeRoleKey(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .trim()
+    .toLowerCase();
+}
 
-  for (const integrante of integrantes) {
-    const fullName = [integrante.nombres, integrante.apellido1, integrante.apellido2]
-      .filter(Boolean)
-      .join(' ')
-      .trim();
-    const role = buildParticipantRole(integrante);
+function isPrincipalRole(role) {
+  const normalizedRole = normalizeRoleKey(role);
+  return normalizedRole.includes('responsable')
+    || normalizedRole.includes('investigador principal')
+    || normalizedRole.includes('coordinador');
+}
 
-    if (!role || (!integrante.investigador_id && !fullName)) continue;
+function getMemberOccupationType(role) {
+  const normalizedRole = normalizeRoleKey(role);
 
-    const participant = {
-      role,
-    };
-
-    if (integrante.investigador_id) {
-      participant.person = {
-        id: toCerifId('Persons', integrante.investigador_id),
-      };
-
-      if (fullName) {
-        participant.person.name = fullName;
-      }
-    } else if (fullName) {
-      participant.person = {
-        name: fullName,
-      };
-    }
-
-    if (participant.person) {
-      participants.push(participant);
+  for (const [keyword, uri] of PROJECT_MEMBER_OCCUPATION_RULES) {
+    if (normalizedRole.includes(keyword)) {
+      return uri;
     }
   }
 
-  return participants;
+  return `${VOCABULARIES.OCDE_OCCUPATION_TYPES}#investigadorOInnovadorMiembro`;
 }
 
-function mapToCerif(row, integrantes = [], ocde = null, abstract = null, outputs = null, equipments = []) {
+function buildPersonParticipant(integrante) {
+  const fullName = [integrante.nombres, integrante.apellido1, integrante.apellido2]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  const role = buildParticipantRole(integrante);
+
+  if (!role || (!integrante.investigador_id && !fullName)) return null;
+
+  const person = {};
+  if (integrante.investigador_id) {
+    person.id = toCerifId('Persons', integrante.investigador_id);
+  }
+  if (fullName) {
+    person.name = fullName;
+  }
+
+  return {
+    role,
+    Person: person,
+  };
+}
+
+function buildTeam(integrantes) {
+  const principalInvestigators = [];
+  const members = [];
+
+  for (const integrante of integrantes) {
+    const participant = buildPersonParticipant(integrante);
+    if (!participant) continue;
+
+    if (isPrincipalRole(participant.role)) {
+      principalInvestigators.push({
+        Person: participant.Person,
+      });
+      continue;
+    }
+
+    members.push({
+      Person: participant.Person,
+      Type: {
+        Scheme: VOCABULARIES.OCDE_OCCUPATION_TYPES,
+        Value: getMemberOccupationType(participant.role),
+      },
+    });
+  }
+
+  if (principalInvestigators.length === 0 && members.length > 0) {
+    principalInvestigators.push({
+      Person: members[0].Person,
+    });
+    members.shift();
+  }
+
+  if (principalInvestigators.length === 0) {
+    return null;
+  }
+
+  return {
+    PrincipalInvestigator: principalInvestigators,
+    ...(members.length > 0 ? { Member: members } : {}),
+  };
+}
+
+function buildConsortium(row) {
+  if (row.grupo_id && row.grupo_nombre) {
+    return {
+      Contractor: [
+        {
+          OrgUnit: {
+            id: toCerifId('OrgUnits', `G${row.grupo_id}`),
+            name: row.grupo_nombre,
+          },
+        },
+      ],
+    };
+  }
+
+  if (row.facultad_id && row.facultad_nombre) {
+    return {
+      Contractor: [
+        {
+          OrgUnit: {
+            id: toCerifId('OrgUnits', `F${row.facultad_id}`),
+            name: row.facultad_nombre,
+          },
+        },
+      ],
+    };
+  }
+
+  return {
+    Contractor: [
+      {
+        OrgUnit: ROOT_ORGUNIT,
+      },
+    ],
+  };
+}
+
+function buildFunded(row) {
+  if (!hasFundingData(row)) return null;
+
+  const externalTotal =
+    Number(row.aporte_no_unmsm || 0)
+    + Number(row.financiamiento_fuente_externa || 0)
+    + Number(row.entidad_asociada || 0);
+
+  const by = externalTotal > 0
+    ? {
+        OrgUnit: {
+          id: toCerifId('OrgUnits', `ExternalFundingSource/${row.id}`),
+          name: 'Fuente financiadora externa',
+        },
+      }
+    : {
+        OrgUnit: ROOT_ORGUNIT,
+      };
+
+  return {
+    By: by,
+    As: {
+      Funding: {
+        id: toCerifId('Fundings', `P${row.id}`),
+        Name: filterEmpty([
+          createTextValueEntry(row.titulo || row.codigo_proyecto || `Financiamiento ${row.id}`, 'es'),
+        ]),
+      },
+    },
+  };
+}
+
+function mapToCerif(row, integrantes = [], ocde = null, abstract = null, equipments = []) {
   const titleValue = row.titulo ? String(row.titulo).trim() : '';
   const lastModified = toISO8601(row.updated_at);
+  const team = buildTeam(integrantes);
+  const consortium = buildConsortium(row);
+  const funded = buildFunded(row);
 
   const project = {
     '@id': toCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
+    Consortium: consortium,
+    OAMandate: {
+      Mandated: false,
+    },
   };
 
   if (titleValue) {
-    project.title = filterEmpty([createTitle(titleValue, 'es')]);
+    project.Title = filterEmpty([createTextValueEntry(titleValue, 'es')]);
   }
 
   if (lastModified) {
-    project.lastModified = lastModified;
+    project.LastModified = lastModified;
   }
 
   if (row.codigo_proyecto) {
-    project.identifiers = filterEmpty([
-      createIdentifier(IDENTIFIER_SCHEMES.PROJECT_REFERENCE, row.codigo_proyecto),
+    project.Identifier = filterEmpty([
+      createSchemeValueEntry(IDENTIFIER_SCHEMES.PROJECT_REFERENCE, row.codigo_proyecto),
     ]);
   }
 
   const types = getProjectTypes(row);
   if (types.length > 0) {
-    project.type = types;
+    project.Type = types;
   }
 
   if (row.fecha_inicio) {
-    project.startDate = row.fecha_inicio instanceof Date
+    project.StartDate = row.fecha_inicio instanceof Date
       ? row.fecha_inicio.toISOString().split('T')[0]
       : row.fecha_inicio;
   }
 
   if (row.fecha_fin) {
-    project.endDate = row.fecha_fin instanceof Date
+    project.EndDate = row.fecha_fin instanceof Date
       ? row.fecha_fin.toISOString().split('T')[0]
       : row.fecha_fin;
   }
 
-  if (row.estado !== undefined && PROJECT_STATUS_MAP[row.estado]) {
-    project.status = PROJECT_STATUS_MAP[row.estado];
+  if (row.estado !== undefined && CONCYTEC_PROJECT_STATUS_MAP[row.estado]) {
+    project.Status = CONCYTEC_PROJECT_STATUS_MAP[row.estado];
   }
 
   if (row.palabras_clave) {
-    project.keywords = row.palabras_clave
+    project.Keywords = row.palabras_clave
       .split(',')
       .map(keyword => keyword.trim())
       .filter(Boolean)
-      .map(value => ({ lang: 'es', value }));
+      .map(value => createTextValueEntry(value, 'es'));
   }
 
   if (abstract) {
-    project.abstract = [{
-      lang: 'es',
-      value: String(abstract).trim(),
-    }];
+    project.Abstract = filterEmpty([
+      createTextValueEntry(String(abstract).trim(), 'es'),
+    ]);
   }
 
   if (ocde?.codigo) {
-    project.subjects = [{
-      scheme: VOCABULARIES.OCDE_FORD,
-      value: `${VOCABULARIES.OCDE_FORD}#${ocde.codigo}`,
+    project.Subject = [{
+      Scheme: VOCABULARIES.OCDE_FORD,
+      Value: `${VOCABULARIES.OCDE_FORD}#${ocde.codigo}`,
     }];
   }
 
   if (row.linea_nombre) {
-    project.researchLine = [row.linea_nombre];
+    project.ResearchLine = [row.linea_nombre];
   }
 
-  const participants = buildParticipants(integrantes);
-  if (participants.length > 0) {
-    project.participants = participants;
+  if (team) {
+    project.Team = team;
   }
 
-  if (hasFundingData(row)) {
-    project.fundings = [{
-      id: toCerifId('Fundings', `P${row.id}`),
-    }];
-  }
-
-  if (outputs) {
-    project.outputs = {
-      publications: outputs.publications || [],
-      patents: outputs.patents || [],
-      products: outputs.products || [],
-    };
+  if (funded) {
+    project.Funded = funded;
   }
 
   if (row.localizacion) {
-    project.geoLocations = [{
-      geoLocationPlace: row.localizacion,
+    project.GeoLocation = [{
+      GeoLocationPlace: row.localizacion,
     }];
   }
 
   if (equipments.length > 0) {
-    project.uses = equipments;
+    project.Uses = equipments;
   }
 
   return project;
@@ -220,34 +346,15 @@ async function getProjectParticipants(projectId) {
   return integrantes;
 }
 
-async function getProjectOutputs(projectId) {
-  const [publications] = await pool.query(
-    `
-      SELECT DISTINCT pp.publicacion_id
-      FROM Publicacion_proyecto pp
-      WHERE pp.proyecto_id = ?
-        AND pp.publicacion_id IS NOT NULL
-        AND IFNULL(pp.estado, 1) = 1
-      ORDER BY pp.publicacion_id
-    `,
-    [projectId]
-  );
-
-  return {
-    publications: publications.map(row => toCerifId('Publications', row.publicacion_id)),
-    patents: [],
-    products: [],
-  };
-}
-
 async function getProjectEquipments(groupId) {
   if (!groupId) return [];
 
   const [rows] = await pool.query(
     `
       SELECT gi.id
-      FROM Grupo_infraestructura gi
+    FROM Grupo_infraestructura gi
       WHERE gi.grupo_id = ?
+        AND LOWER(TRIM(gi.categoria)) = 'equipo'
       ORDER BY gi.id
       LIMIT 100
     `,
@@ -312,7 +419,6 @@ export async function getProjects({ from, until, offset = 0, limit = env.PAGE_SI
   const results = [];
   for (const projectRow of projects) {
     const integrantes = await getProjectParticipants(projectRow.id);
-    const outputs = await getProjectOutputs(projectRow.id);
     const equipments = await getProjectEquipments(projectRow.grupo_id);
 
     const ocde = projectRow.ocde_codigo
@@ -326,7 +432,7 @@ export async function getProjects({ from, until, offset = 0, limit = env.PAGE_SI
         setSpec: 'projects',
       },
       metadata: {
-        Project: mapToCerif(projectRow, integrantes, ocde, projectRow.proyecto_descripcion, outputs, equipments),
+        Project: mapToCerif(projectRow, integrantes, ocde, projectRow.proyecto_descripcion, equipments),
       },
     });
   }
@@ -397,7 +503,6 @@ export async function getProjectById(id) {
 
   const projectRow = rows[0];
   const integrantes = await getProjectParticipants(projectRow.id);
-  const outputs = await getProjectOutputs(projectRow.id);
   const equipments = await getProjectEquipments(projectRow.grupo_id);
 
   const ocde = projectRow.ocde_codigo
@@ -411,7 +516,7 @@ export async function getProjectById(id) {
       setSpec: 'projects',
     },
     metadata: {
-      Project: mapToCerif(projectRow, integrantes, ocde, projectRow.proyecto_descripcion, outputs, equipments),
+      Project: mapToCerif(projectRow, integrantes, ocde, projectRow.proyecto_descripcion, equipments),
     },
   };
 }

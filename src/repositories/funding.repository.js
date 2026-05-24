@@ -5,17 +5,23 @@ import {
   toCerifId,
   toISO8601,
   filterEmpty,
-  createTitle,
-  createIdentifier,
   buildDateFilter,
+  createSchemeValueEntry,
+  createTextValueEntry,
 } from '../utils/formatters.js';
 import {
+  FUNDING_TYPE_VALUES,
   IDENTIFIER_SCHEMES,
-  VOCABULARIES,
   NAMESPACES,
+  VOCABULARIES,
 } from '../utils/constants.js';
 
 const ENTITY_TYPE = 'Fundings';
+const ROOT_ORGUNIT = {
+  id: toCerifId('OrgUnits', '1'),
+  acronym: 'UNMSM',
+  name: 'Universidad Nacional Mayor de San Marcos',
+};
 const FUNDING_APORTE_TOTAL = `
   (
     COALESCE(p.aporte_unmsm, 0)
@@ -50,20 +56,14 @@ function parseFundingProjectId(id) {
 }
 
 function buildFundingType(row) {
-  const internalAmount = Number(row.aporte_unmsm || 0);
   const externalTotal =
     Number(row.aporte_no_unmsm || 0)
     + Number(row.financiamiento_fuente_externa || 0)
     + Number(row.entidad_asociada || 0);
 
-  if (externalTotal > 0 || internalAmount <= 0) {
-    return null;
-  }
-
-  return {
-    scheme: VOCABULARIES.OPENAIRE_FUNDING_TYPES,
-    value: `${VOCABULARIES.OPENAIRE_FUNDING_TYPES}#InternalFunding`,
-  };
+  if (row.convocatoria) return FUNDING_TYPE_VALUES.CALL;
+  if (externalTotal > 0) return FUNDING_TYPE_VALUES.GRANT;
+  return FUNDING_TYPE_VALUES.INTERNAL;
 }
 
 function buildFundingAmount(row) {
@@ -98,65 +98,129 @@ function buildBudgetBreakdown(row) {
   return breakdown;
 }
 
-function mapToCerif(row) {
-  const fundingId = `P${row.id}`;
-  const lastModified = toISO8601(row.updated_at);
-  const projectTitle = String(row.titulo || '').trim();
+function buildFundingName(row) {
+  const explicitTitle = String(row.titulo || '').trim();
+  if (explicitTitle) return explicitTitle;
+
   const awardNumber = String(row.codigo_proyecto || '').trim();
-  const fundingType = buildFundingType(row);
+  if (awardNumber) return `Financiamiento ${awardNumber}`;
 
-  const funding = {
-    '@id': toCerifId(ENTITY_TYPE, fundingId),
-    '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    relatedProjects: [toCerifId('Projects', row.id)],
-    lastModified,
-  };
+  return `Financiamiento del proyecto ${row.id}`;
+}
 
-  if (fundingType) {
-    funding.type = fundingType;
-  }
-
-  if (projectTitle) {
-    funding.title = [createTitle(projectTitle, 'es')];
-  }
-
-  if (awardNumber) {
-    funding.identifiers = filterEmpty([
-      createIdentifier(IDENTIFIER_SCHEMES.AWARD_NUMBER, awardNumber),
-    ]);
-  }
-
-  if (Number(row.aporte_unmsm || 0) > 0) {
-    funding.fundedBy = {
-      orgUnit: {
-        id: toCerifId('OrgUnits', '1'),
-        acronym: 'UNMSM',
-        name: 'Universidad Nacional Mayor de San Marcos',
+function buildParentFunding(row) {
+  if (row.convocatoria) {
+    return {
+      Funding: {
+        id: toCerifId(ENTITY_TYPE, `C${row.convocatoria}`),
+        Name: filterEmpty([
+          createTextValueEntry(`Convocatoria ${row.tipo_proyecto || row.convocatoria}`, 'es'),
+        ]),
       },
     };
   }
 
+  if (!row.tipo_proyecto) return null;
+
+  return {
+    Funding: {
+      id: toCerifId(ENTITY_TYPE, `T${row.tipo_proyecto}`),
+      Name: filterEmpty([
+        createTextValueEntry(`Programa ${row.tipo_proyecto}`, 'es'),
+      ]),
+    },
+  };
+}
+
+function buildFunders(row) {
+  const funders = [];
+  const internalAmount = Number(row.aporte_unmsm || 0);
+  const externalTotal =
+    Number(row.aporte_no_unmsm || 0)
+    + Number(row.financiamiento_fuente_externa || 0)
+    + Number(row.entidad_asociada || 0);
+
+  if (internalAmount > 0 || externalTotal <= 0) {
+    funders.push({
+      OrgUnit: {
+        id: ROOT_ORGUNIT.id,
+        acronym: ROOT_ORGUNIT.acronym,
+        name: ROOT_ORGUNIT.name,
+      },
+    });
+  }
+
+  if (externalTotal > 0) {
+    funders.push({
+      OrgUnit: {
+        id: toCerifId('OrgUnits', `ExternalFundingSource/${row.id}`),
+        name: 'Fuente financiadora externa',
+      },
+    });
+  }
+
+  return funders;
+}
+
+function mapToCerif(row) {
+  const fundingId = `P${row.id}`;
+  const lastModified = toISO8601(row.updated_at);
+  const fundingName = buildFundingName(row);
+  const awardNumber = String(row.codigo_proyecto || '').trim();
+  const fundingType = buildFundingType(row);
+  const funders = buildFunders(row);
+  const parentFunding = buildParentFunding(row);
+
+  const funding = {
+    '@id': toCerifId(ENTITY_TYPE, fundingId),
+    '@xmlns': NAMESPACES.PERUCRIS_CERIF,
+    Type: {
+      Scheme: VOCABULARIES.OPENAIRE_FUNDING_TYPES,
+      Value: fundingType,
+    },
+    Name: filterEmpty([createTextValueEntry(fundingName, 'es')]),
+    Funder: funders,
+    OAMandate: {
+      Mandated: false,
+    },
+    RelatedProjects: [toCerifId('Projects', row.id)],
+  };
+
+  if (lastModified) {
+    funding.LastModified = lastModified;
+  }
+
+  if (awardNumber) {
+    funding.Identifier = filterEmpty([
+      createSchemeValueEntry(IDENTIFIER_SCHEMES.AWARD_NUMBER, awardNumber),
+    ]);
+  }
+
+  if (parentFunding) {
+    funding.PartOf = parentFunding;
+  }
+
   if (row.fecha_inicio) {
-    funding.startDate = row.fecha_inicio instanceof Date
+    funding.StartDate = row.fecha_inicio instanceof Date
       ? row.fecha_inicio.toISOString().split('T')[0]
       : row.fecha_inicio;
   } else if (row.periodo) {
-    funding.startDate = String(row.periodo);
+    funding.StartDate = String(row.periodo);
   }
 
   if (row.fecha_fin) {
-    funding.endDate = row.fecha_fin instanceof Date
+    funding.EndDate = row.fecha_fin instanceof Date
       ? row.fecha_fin.toISOString().split('T')[0]
       : row.fecha_fin;
   }
 
   const amount = buildFundingAmount(row);
   if (amount) {
-    funding.amount = amount;
+    funding.Amount = amount;
   }
 
   if (row.monto_subvencion && Number(row.monto_subvencion) > 0) {
-    funding.executedAmount = {
+    funding.ExecutedAmount = {
       value: Math.round(Number(row.monto_subvencion)),
       currency: 'PEN',
     };
@@ -168,14 +232,15 @@ function mapToCerif(row) {
   if (row.facultad_nombre) descriptionParts.push(`Facultad: ${row.facultad_nombre}`);
 
   if (descriptionParts.length > 0) {
-    funding.description = [{
-      lang: 'es',
-      value: descriptionParts.join('. '),
-    }];
+    funding.Description = filterEmpty([
+      createTextValueEntry(descriptionParts.join('. '), 'es'),
+    ]);
   }
 
   if (row.tipo_proyecto) {
-    funding.keywords = [{ value: row.tipo_proyecto }];
+    funding.Keywords = filterEmpty([
+      createTextValueEntry(row.tipo_proyecto, null),
+    ]);
   }
 
   return funding;

@@ -7,8 +7,10 @@ import {
   formatFullName,
   formatFamilyNames,
   filterEmpty,
-  createIdentifier,
   buildDateFilter,
+  createSchemeValueEntry,
+  createTextValueEntry,
+  normalizeOrcidToken,
 } from '../utils/formatters.js';
 import {
   IDENTIFIER_SCHEMES,
@@ -19,10 +21,7 @@ import {
 const ENTITY_TYPE = 'Persons';
 
 function normalizeOrcid(orcid) {
-  if (!orcid) return null;
-  const value = String(orcid).trim();
-  if (!value) return null;
-  return value.startsWith('http') ? value : `https://orcid.org/${value}`;
+  return normalizeOrcidToken(orcid);
 }
 
 function normalizeEmail(value) {
@@ -127,10 +126,6 @@ function normalizeContact(value) {
 }
 
 function buildAffiliationContext(row) {
-  if (!row.facultad_id && !row.instituto_id) {
-    return null;
-  }
-
   return {
     id: row.facultad_id,
     nombre: row.facultad_nombre,
@@ -164,90 +159,94 @@ function mapToCerif(row, affiliation = null) {
   const fullName = formatFullName(row.nombres, row.apellido1, row.apellido2) || null;
   const familyNames = formatFamilyNames(row.apellido1, row.apellido2) || null;
   const firstNames = String(row.nombres || '').trim() || null;
+  const orcid = normalizeOrcid(row.codigo_orcid);
 
   const identifiers = filterEmpty([
     documentType === 'DNI' && /^\d{8}$/.test(String(row.doc_numero || '').trim())
-      ? createIdentifier(IDENTIFIER_SCHEMES.DNI, row.doc_numero)
-      : null,
-    row.codigo_orcid
-      ? createIdentifier(IDENTIFIER_SCHEMES.ORCID, normalizeOrcid(row.codigo_orcid))
+      ? createSchemeValueEntry(IDENTIFIER_SCHEMES.DNI, row.doc_numero)
       : null,
     row.scopus_id && row.scopus_id !== '0'
-      ? createIdentifier(IDENTIFIER_SCHEMES.SCOPUS_AUTHOR_ID, row.scopus_id)
+      ? createSchemeValueEntry(IDENTIFIER_SCHEMES.SCOPUS_AUTHOR_ID, row.scopus_id)
       : null,
     row.researcher_id && row.researcher_id !== '0'
-      ? createIdentifier(IDENTIFIER_SCHEMES.RESEARCHER_ID, row.researcher_id)
+      ? createSchemeValueEntry(IDENTIFIER_SCHEMES.RESEARCHER_ID, row.researcher_id)
       : null,
   ]);
 
-  const emails = [...new Set(filterEmpty([row.email1, row.email2, row.email3].map(normalizeContact)))];
+  const emails = [...new Set(filterEmpty([row.email1, row.email2, row.email3].map(normalizeEmail)).map(email => `mailto:${email}`))];
 
-  const affiliations = [];
-  if (affiliation) {
-    if (affiliation.id && affiliation.nombre) {
-      affiliations.push({
-        orgUnit: {
-          id: toCerifId('OrgUnits', `F${affiliation.id}`),
-          name: affiliation.nombre,
-        },
-      });
-    }
+  const affiliations = [
+    {
+      OrgUnit: {
+        id: toCerifId('OrgUnits', '1'),
+        name: 'Universidad Nacional Mayor de San Marcos',
+      },
+    },
+  ];
 
-    if (affiliation.instituto_id && affiliation.instituto_nombre) {
-      affiliations.push({
-        orgUnit: {
-          id: toCerifId('OrgUnits', `I${affiliation.instituto_id}`),
-          name: affiliation.instituto_nombre,
-        },
-      });
-    }
+  if (affiliation?.id && affiliation.nombre) {
+    affiliations.push({
+      OrgUnit: {
+        id: toCerifId('OrgUnits', `F${affiliation.id}`),
+        name: affiliation.nombre,
+      },
+    });
+  }
+
+  if (affiliation?.instituto_id && affiliation.instituto_nombre) {
+    affiliations.push({
+      OrgUnit: {
+        id: toCerifId('OrgUnits', `I${affiliation.instituto_id}`),
+        name: affiliation.instituto_nombre,
+      },
+    });
   }
 
   const personName = {};
   if (familyNames) {
-    personName.familyNames = familyNames;
+    personName.FamilyNames = familyNames;
   }
   if (firstNames) {
-    personName.firstNames = firstNames;
+    personName.FirstNames = firstNames;
   }
   if (fullName) {
-    personName.fullName = fullName;
+    personName.FullName = fullName;
   }
 
   const person = {
     '@id': toCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    personName,
+    PersonName: personName,
+    Gender: GENDER_MAP[row.sexo],
   };
 
   const lastModified = toISO8601(row.updated_at);
   if (lastModified) {
-    person.lastModified = lastModified;
-  }
-
-  // Solo agregar campos con valores
-  if (row.sexo && GENDER_MAP[row.sexo]) {
-    person.gender = GENDER_MAP[row.sexo];
+    person.LastModified = lastModified;
   }
 
   if (identifiers.length > 0) {
-    person.identifiers = identifiers;
+    person.Identifier = identifiers;
+  }
+
+  if (orcid) {
+    person.ORCID = orcid;
   }
 
   if (emails.length > 0) {
-    person.emails = emails;
+    person.ElectronicAddress = emails;
   }
 
   if (affiliations.length > 0) {
-    person.affiliations = affiliations;
+    person.Affiliation = affiliations;
   }
 
   if (row.palabras_clave) {
-    person.keywords = row.palabras_clave
+    person.Keywords = row.palabras_clave
       .split(',')
       .map(keyword => keyword.trim())
       .filter(Boolean)
-      .map(value => ({ value }));
+      .map(value => createTextValueEntry(value, null));
   }
 
   return person;
@@ -261,7 +260,12 @@ function mapToCerif(row, affiliation = null) {
  */
 export async function countPersons(from, until) {
   const dateFilter = buildDateFilter(from, until, 'ui.updated_at');
-  let query = 'SELECT COUNT(*) as total FROM Usuario_investigador ui WHERE ui.estado = 1';
+  let query = `
+    SELECT COUNT(*) as total
+    FROM Usuario_investigador ui
+    WHERE ui.estado = 1
+      AND ui.sexo IN ('M', 'F')
+  `;
 
   if (dateFilter.clause) {
     query += ` AND ${dateFilter.clause}`;
@@ -290,6 +294,7 @@ export async function getPersons({ from, until, offset = 0, limit = env.PAGE_SIZ
     LEFT JOIN Facultad f ON ui.facultad_id = f.id
     LEFT JOIN Instituto i ON ui.instituto_id = i.id
     WHERE ui.estado = 1
+      AND ui.sexo IN ('M', 'F')
   `;
 
   if (dateFilter.clause) {
@@ -321,6 +326,7 @@ export async function getPersonHeaders({ from, until, offset = 0, limit = env.PA
     SELECT ui.id, ui.updated_at
     FROM Usuario_investigador ui
     WHERE ui.estado = 1
+      AND ui.sexo IN ('M', 'F')
   `;
 
   if (dateFilter.clause) {
@@ -351,7 +357,9 @@ export async function getPersonById(id) {
     FROM Usuario_investigador ui
     LEFT JOIN Facultad f ON ui.facultad_id = f.id
     LEFT JOIN Instituto i ON ui.instituto_id = i.id
-    WHERE ui.id = ? AND ui.estado = 1
+    WHERE ui.id = ?
+      AND ui.estado = 1
+      AND ui.sexo IN ('M', 'F')
   `;
 
   const [rows] = await pool.query(query, [id]);

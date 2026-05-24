@@ -5,15 +5,18 @@ import {
   toCerifId,
   toISO8601,
   filterEmpty,
-  createIdentifier,
-  createTitle,
   buildDateFilter,
+  createSchemeValueEntry,
+  createTextValueEntry,
 } from '../utils/formatters.js';
 import {
-  IDENTIFIER_SCHEMES,
   NAMESPACES,
+  ORGUNIT_SUBTYPE_VALUES,
+  ORGUNIT_TYPE_VALUES,
   UNMSM_IDENTIFIERS,
   UNMSM_CODES,
+  UNMSM_ORGUNIT_TYPED_VALUES,
+  VOCABULARIES,
 } from '../utils/constants.js';
 
 const ENTITY_TYPE = 'OrgUnits';
@@ -71,6 +74,60 @@ function normalizeEmailValue(value) {
   return `mailto:${trimmed}`;
 }
 
+function buildIdentifier(scheme, value) {
+  return createSchemeValueEntry(scheme, value);
+}
+
+function buildName(value, lang = 'es') {
+  return createTextValueEntry(value, lang);
+}
+
+function buildTypeValue(value, scheme = null) {
+  if (!value) return null;
+
+  if (!scheme) {
+    return {
+      Value: String(value).trim(),
+    };
+  }
+
+  return createSchemeValueEntry(scheme, value);
+}
+
+function buildPartOf(orgUnitId, orgUnitName) {
+  if (!orgUnitId) return null;
+
+  const partOf = {
+    OrgUnit: {
+      id: toCerifId(ENTITY_TYPE, orgUnitId),
+    },
+  };
+
+  if (orgUnitName) {
+    partOf.OrgUnit.name = orgUnitName;
+  }
+
+  return partOf;
+}
+
+function buildRootTypeEntries() {
+  return filterEmpty([
+    buildTypeValue(ORGUNIT_TYPE_VALUES.ROOT),
+    buildTypeValue(UNMSM_ORGUNIT_TYPED_VALUES.SECTOR, VOCABULARIES.ORGUNIT_SECTOR_INSTITUTIONAL),
+    buildTypeValue(UNMSM_ORGUNIT_TYPED_VALUES.HIGHER_EDUCATION, VOCABULARIES.ORGUNIT_HIGHER_EDUCATION_TYPE),
+    buildTypeValue(UNMSM_ORGUNIT_TYPED_VALUES.NATURE, VOCABULARIES.ORGUNIT_NATURE),
+    buildTypeValue(UNMSM_ROOT.ciiu, VOCABULARIES.ORGUNIT_CIIU),
+  ]);
+}
+
+function buildDependencyTypeEntries(subtype) {
+  return filterEmpty([
+    buildTypeValue(ORGUNIT_TYPE_VALUES.DEPENDENCY),
+    buildTypeValue(subtype, VOCABULARIES.ORGUNIT_SUBTYPE),
+    buildTypeValue(UNMSM_ROOT.ciiu, VOCABULARIES.ORGUNIT_CIIU),
+  ]);
+}
+
 // Hardcoded: UNMSM como organizacion raiz
 const UNMSM_ROOT = {
   id: 1,
@@ -118,32 +175,19 @@ function createRootOrgUnitRecord() {
       OrgUnit: {
         '@id': toCerifId(ENTITY_TYPE, UNMSM_ROOT.id),
         '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-        name: [createTitle(UNMSM_ROOT.nombre)],
-        acronym: UNMSM_ROOT.acronym,
-        type: 'Universidad',
-        lastModified: FALLBACK_DATE,
-        identifiers: filterEmpty([
-          createIdentifier(IDENTIFIER_SCHEMES.RUC, UNMSM_ROOT.ruc),
-          createIdentifier('https://w3id.org/cerif/vocab/IdentifierTypes#RORID', normalizeRorValue(UNMSM_ROOT.ror)),
-          createIdentifier('https://w3id.org/cerif/vocab/IdentifierTypes#ISNI', normalizeIsniValue(UNMSM_ROOT.isni)),
-          createIdentifier(IDENTIFIER_SCHEMES.GRID, UNMSM_ROOT.grid),
-          createIdentifier('https://w3id.org/cerif/vocab/IdentifierTypes#ScopusAffiliationID', UNMSM_ROOT.scopusAffiliationId),
+        Name: filterEmpty([buildName(UNMSM_ROOT.nombre)]),
+        Acronym: UNMSM_ROOT.acronym,
+        Type: buildRootTypeEntries(),
+        LastModified: FALLBACK_DATE,
+        Identifier: filterEmpty([
+          buildIdentifier('https://purl.org/pe-repo/concytec/terminos#ruc', UNMSM_ROOT.ruc),
+          buildIdentifier('https://w3id.org/cerif/vocab/IdentifierTypes#RORID', normalizeRorValue(UNMSM_ROOT.ror)),
+          buildIdentifier('https://w3id.org/cerif/vocab/IdentifierTypes#ISNI', normalizeIsniValue(UNMSM_ROOT.isni)),
+          buildIdentifier('https://www.grid.ac', UNMSM_ROOT.grid),
+          buildIdentifier('https://w3id.org/cerif/vocab/IdentifierTypes#ScopusAffiliationID', UNMSM_ROOT.scopusAffiliationId),
         ]),
-        countryCode: UNMSM_ROOT.countryCode,
-        classifications: filterEmpty([
-          {
-            scheme: 'https://purl.org/pe-repo/inei/ubigeo',
-            value: UNMSM_ROOT.ubigeo,
-          },
-          {
-            scheme: 'https://purl.org/pe-repo/inei/ciiu',
-            value: UNMSM_ROOT.ciiu,
-          },
-          {
-            scheme: 'https://purl.org/pe-repo/ocde/sector',
-            value: UNMSM_ROOT.sectorOcde,
-          },
-        ]),
+        CountryCode: UNMSM_ROOT.countryCode,
+        UbiGeo: buildIdentifier(VOCABULARIES.ORGUNIT_UBIGEO, UNMSM_ROOT.ubigeo),
       },
     },
   };
@@ -160,34 +204,13 @@ function mapFacultadToCerif(row) {
   const orgUnit = {
     '@id': toCerifId(ENTITY_TYPE, `F${row.id}`),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    name: [createTitle(row.nombre)],
-    type: 'Facultad',
-    lastModified,
+    Name: filterEmpty([buildName(row.nombre)]),
+    Type: buildDependencyTypeEntries(ORGUNIT_SUBTYPE_VALUES.RESEARCH_UNIT),
+    UbiGeo: buildIdentifier(VOCABULARIES.ORGUNIT_UBIGEO, UNMSM_CODES.UBIGEO_LIMA),
+    LastModified: lastModified,
   };
 
-  // Todas las facultades dependen de UNMSM
-  orgUnit.partOf = {
-    orgUnit: {
-      id: toCerifId(ENTITY_TYPE, UNMSM_ROOT.id),
-      name: UNMSM_ROOT.nombre,
-    },
-  };
-
-  // Agregar clasificaciones: UbiGeo, CIIU, Sector OCDE (heredadas de UNMSM)
-  orgUnit.classifications = filterEmpty([
-    {
-      scheme: 'https://purl.org/pe-repo/inei/ubigeo',
-      value: UNMSM_CODES.UBIGEO_LIMA,
-    },
-    {
-      scheme: 'https://purl.org/pe-repo/inei/ciiu',
-      value: UNMSM_CODES.CIIU_EDUCACION_SUPERIOR,
-    },
-    {
-      scheme: 'https://purl.org/pe-repo/ocde/sector',
-      value: UNMSM_CODES.SECTOR_OCDE,
-    },
-  ]);
+  orgUnit.PartOf = buildPartOf(String(UNMSM_ROOT.id), UNMSM_ROOT.nombre);
 
   return orgUnit;
 }
@@ -203,36 +226,15 @@ function mapInstitutoToCerif(row) {
   const orgUnit = {
     '@id': toCerifId(ENTITY_TYPE, `I${row.id}`),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    name: [createTitle(row.instituto)],
-    type: 'Instituto',
-    lastModified,
+    Name: filterEmpty([buildName(row.instituto)]),
+    Type: buildDependencyTypeEntries(ORGUNIT_SUBTYPE_VALUES.RESEARCH_UNIT),
+    UbiGeo: buildIdentifier(VOCABULARIES.ORGUNIT_UBIGEO, UNMSM_CODES.UBIGEO_LIMA),
+    LastModified: lastModified,
   };
 
-  // Los institutos dependen de su facultad
-  if (row.facultad_id && row.facultad_nombre) {
-    orgUnit.partOf = {
-      orgUnit: {
-        id: toCerifId(ENTITY_TYPE, `F${row.facultad_id}`),
-        name: row.facultad_nombre,
-      },
-    };
-  }
-
-  // Agregar clasificaciones: UbiGeo, CIIU, Sector OCDE (heredadas de UNMSM)
-  orgUnit.classifications = filterEmpty([
-    {
-      scheme: 'https://purl.org/pe-repo/inei/ubigeo',
-      value: UNMSM_CODES.UBIGEO_LIMA,
-    },
-    {
-      scheme: 'https://purl.org/pe-repo/inei/ciiu',
-      value: UNMSM_CODES.CIIU_EDUCACION_SUPERIOR,
-    },
-    {
-      scheme: 'https://purl.org/pe-repo/ocde/sector',
-      value: UNMSM_CODES.SECTOR_OCDE,
-    },
-  ]);
+  orgUnit.PartOf = row.facultad_id && row.facultad_nombre
+    ? buildPartOf(`F${row.facultad_id}`, row.facultad_nombre)
+    : buildPartOf(String(UNMSM_ROOT.id), UNMSM_ROOT.nombre);
 
   return orgUnit;
 }
@@ -248,79 +250,47 @@ function mapGrupoToCerif(row) {
   const orgUnit = {
     '@id': toCerifId(ENTITY_TYPE, `G${row.id}`),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    name: [createTitle(row.grupo_nombre)],
-    type: 'Grupo de investigacion',
-    lastModified,
+    Name: filterEmpty([buildName(row.grupo_nombre)]),
+    Type: buildDependencyTypeEntries(ORGUNIT_SUBTYPE_VALUES.RESEARCH_GROUP),
+    UbiGeo: buildIdentifier(VOCABULARIES.ORGUNIT_UBIGEO, UNMSM_CODES.UBIGEO_LIMA),
+    LastModified: lastModified,
   };
 
   if (row.grupo_nombre_corto) {
-    orgUnit.acronym = row.grupo_nombre_corto;
+    orgUnit.Acronym = row.grupo_nombre_corto;
   }
 
-  // Los grupos dependen de su facultad
-  if (row.facultad_id && row.facultad_nombre) {
-    orgUnit.partOf = {
-      orgUnit: {
-        id: toCerifId(ENTITY_TYPE, `F${row.facultad_id}`),
-        name: row.facultad_nombre,
-      },
-    };
-  }
+  orgUnit.PartOf = row.facultad_id && row.facultad_nombre
+    ? buildPartOf(`F${row.facultad_id}`, row.facultad_nombre)
+    : buildPartOf(String(UNMSM_ROOT.id), UNMSM_ROOT.nombre);
 
   const websites = [];
   if (row.web) {
     const normalizedWeb = normalizeUrlValue(row.web);
     if (normalizedWeb) {
-      websites.push({ type: 'homepage', url: normalizedWeb });
+      websites.push({ Type: 'homepage', URL: normalizedWeb });
     }
   }
   if (row.email) {
     const normalizedEmail = normalizeEmailValue(row.email);
     if (normalizedEmail) {
-      websites.push({ type: 'email', url: normalizedEmail });
+      websites.push({ Type: 'email', URL: normalizedEmail });
     }
   }
   if (websites.length > 0) {
-    orgUnit.websites = websites;
+    orgUnit.Websites = websites;
   }
 
   if (row.direccion) {
-    orgUnit.address = { street: row.direccion };
+    orgUnit.Address = { Street: row.direccion };
   }
 
   if (row.presentacion) {
-    orgUnit.description = [{ lang: 'es', value: row.presentacion }];
+    orgUnit.Description = filterEmpty([buildName(row.presentacion)]);
   }
 
-  // Clasificaciones del grupo
-  const classifications = [];
-
-  // UbiGeo, CIIU, Sector OCDE (heredadas de UNMSM)
-  classifications.push(
-    {
-      scheme: 'https://purl.org/pe-repo/inei/ubigeo',
-      value: UNMSM_CODES.UBIGEO_LIMA,
-    },
-    {
-      scheme: 'https://purl.org/pe-repo/inei/ciiu',
-      value: UNMSM_CODES.CIIU_EDUCACION_SUPERIOR,
-    },
-    {
-      scheme: 'https://purl.org/pe-repo/ocde/sector',
-      value: UNMSM_CODES.SECTOR_OCDE,
-    }
-  );
-
-  // Categoría del grupo (si existe)
   if (row.grupo_categoria) {
-    classifications.push({
-      scheme: IDENTIFIER_SCHEMES.ORG_TYPE,
-      value: row.grupo_categoria,
-    });
-  }
-
-  if (classifications.length > 0) {
-    orgUnit.classifications = filterEmpty(classifications);
+    orgUnit.Keywords = [{ Value: String(row.grupo_categoria).trim() }];
   }
 
   return orgUnit;

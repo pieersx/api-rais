@@ -5,9 +5,11 @@ import {
   toCerifId,
   toISO8601,
   filterEmpty,
-  createTitle,
   buildDateFilter,
+  createSchemeValueEntry,
+  createTextValueEntry,
   inferIPCClassification,
+  normalizeOrcidToken,
 } from '../utils/formatters.js';
 import {
   PATENT_TYPE_MAP,
@@ -18,10 +20,7 @@ import {
 const ENTITY_TYPE = 'Patents';
 
 function normalizeOrcid(orcid) {
-  if (!orcid) return null;
-  const value = String(orcid).trim();
-  if (!value) return null;
-  return value.startsWith('http') ? value : `https://orcid.org/${value}`;
+  return normalizeOrcidToken(orcid);
 }
 
 function buildPatentHeader(row) {
@@ -42,40 +41,42 @@ function mapToCerif(row, inventors = [], holders = []) {
   const typeUri = PATENT_TYPE_MAP[row.tipo] || PATENT_TYPE_MAP.default;
   const ipcClassification = inferIPCClassification(row);
   const lastModified = toISO8601(row.updated_at);
-  const title = filterEmpty([createTitle(row.titulo, 'es')]);
+  const title = filterEmpty([createTextValueEntry(row.titulo, 'es')]);
   const patentNumber = String(row.nro_registro || '').trim();
+  const abstractParts = [];
 
   const patent = {
     '@id': toCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    type: typeUri,
-    subjects: [
+    Type: typeUri,
+    Subject: [
       {
-        scheme: ipcClassification.scheme,
-        value: ipcClassification.value,
+        Scheme: ipcClassification.scheme,
+        Value: ipcClassification.value,
       },
     ],
-    countryCode: 'PE',
+    CountryCode: 'PE',
   };
 
   if (patentNumber) {
-    patent.patentNumber = patentNumber;
+    patent.PatentNumber = patentNumber;
   }
 
   if (title.length > 0) {
-    patent.title = title;
+    patent.Title = title;
   }
 
   if (lastModified) {
-    patent.lastModified = lastModified;
+    patent.LastModified = lastModified;
   }
 
   if (ipcClassification.note) {
-    patent.notes = [ipcClassification.note];
+    patent.Notes = [ipcClassification.note];
   }
 
   if (inventors.length > 0) {
-    patent.inventors = inventors.map(inventor => {
+    patent.Inventors = {
+      Inventor: inventors.map(inventor => {
       const fullName = [inventor.nombres, inventor.apellido1, inventor.apellido2]
         .filter(Boolean)
         .join(' ')
@@ -91,64 +92,63 @@ function mapToCerif(row, inventors = [], holders = []) {
 
       const identifiers = [];
       if (inventor.doc_numero) {
-        identifiers.push({
-          scheme: 'http://purl.org/pe-repo/concytec/terminos#dni',
-          value: String(inventor.doc_numero),
-        });
+        identifiers.push(createSchemeValueEntry('http://purl.org/pe-repo/concytec/terminos#dni', inventor.doc_numero));
       }
       if (inventor.codigo_orcid) {
-        identifiers.push({
-          scheme: 'https://orcid.org',
-          value: normalizeOrcid(inventor.codigo_orcid),
-        });
+        identifiers.push(createSchemeValueEntry('https://orcid.org', normalizeOrcid(inventor.codigo_orcid)));
       }
 
-      if (identifiers.length > 0) {
-        person.identifiers = identifiers;
+      const filteredIdentifiers = filterEmpty(identifiers);
+      if (filteredIdentifiers.length > 0) {
+        person.Identifier = filteredIdentifiers;
       }
 
-      return { person };
-    });
+      return { Person: person };
+    }),
+    };
   }
 
   const holderItems = [];
-  holderItems.push(...holders.map(holder => ({ orgUnit: { name: holder.titular } })));
+  holderItems.push(...holders.map(holder => ({ OrgUnit: { name: holder.titular } })));
 
-  if (row.titular1) holderItems.push({ orgUnit: { name: row.titular1 } });
-  if (row.titular2) holderItems.push({ orgUnit: { name: row.titular2 } });
+  if (row.titular1) holderItems.push({ OrgUnit: { name: row.titular1 } });
+  if (row.titular2) holderItems.push({ OrgUnit: { name: row.titular2 } });
 
   if (holderItems.length > 0) {
-    patent.holders = holderItems;
+    patent.Holders = {
+      Holder: holderItems,
+    };
   }
 
-  patent.issuer = {
-    orgUnit: {
+  patent.Issuer = {
+    OrgUnit: {
       acronym: 'INDECOPI',
       name: 'Instituto Nacional de Defensa de la Competencia y de la Protección de la Propiedad Intelectual',
     },
   };
 
   if (row.fecha_presentacion) {
-    patent.registrationDate = row.fecha_presentacion instanceof Date
+    patent.RegistrationDate = row.fecha_presentacion instanceof Date
       ? row.fecha_presentacion.toISOString().split('T')[0]
       : row.fecha_presentacion;
   }
 
   if (row.comentario) {
-    patent.abstract = [{ lang: 'es', value: row.comentario }];
+    abstractParts.push(String(row.comentario).trim());
   }
 
   if (row.enlace) {
-    patent.url = row.enlace;
+    patent.URL = row.enlace;
   }
 
   if (row.nro_expediente) {
-    patent.identifiers = [
-      {
-        type: 'Expediente',
-        value: row.nro_expediente,
-      },
-    ];
+    abstractParts.push(`Expediente: ${row.nro_expediente}`);
+  }
+
+  if (abstractParts.length > 0) {
+    patent.Abstract = filterEmpty([
+      createTextValueEntry(abstractParts.join('. '), 'es'),
+    ]);
   }
 
   return patent;
