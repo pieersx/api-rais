@@ -8,7 +8,6 @@ import {
   buildDateFilter,
   createSchemeValueEntry,
   createTextValueEntry,
-  createTypedIdentifier,
   inferAccessRights,
   normalizeOrcidToken,
 } from '../utils/formatters.js';
@@ -23,11 +22,27 @@ const MIN_VALID_UPDATED_AT = '2000-01-01 00:00:00';
 const JOURNAL_CONTAINER_TYPE = 'http://purl.org/coar/resource_type/c_0640';
 const BOOK_CONTAINER_TYPE = 'http://purl.org/coar/resource_type/c_2f33';
 const SERIAL_PUBLICATION_TYPES = new Set(['articulo', 'evento', 'ensayo']);
+const CONTAINER_IDENTIFIER_PUBLICATION_TYPES = new Set(['articulo', 'evento', 'ensayo', 'capitulo']);
 const AUTHOR_CATEGORIES = new Set(['autor', 'autor de correspondencia', 'tesista', '']);
 const EDITOR_CATEGORIES = new Set(['editor']);
 const ADVISOR_CATEGORIES = new Set(['asesor', 'co-asesor', 'co asesor']);
 const RENATI_THESIS_TYPE_URI = `${VOCABULARIES.RENATI_TYPE}#tesis`;
 const ACCESS_RIGHTS_VOCABULARY = VOCABULARIES.COAR_ACCESS_RIGHTS;
+const HAS_REAL_DOI_SQL = `TRIM(COALESCE(p.doi, '')) NOT IN ('', '-', '--', '---')`;
+const HAS_REAL_HANDLE_SQL = `TRIM(COALESCE(p.uri, '')) NOT IN ('', '-', '--', '---')`;
+const HAS_REAL_TOP_LEVEL_BOOK_OR_SERIAL_SQL = `(
+  LOWER(TRIM(COALESCE(p.tipo_publicacion, ''))) NOT IN ('articulo', 'evento', 'ensayo', 'capitulo')
+  AND (
+    TRIM(COALESCE(p.isbn, '')) NOT IN ('', '-', '--', '---')
+    OR TRIM(COALESCE(p.issn, '')) NOT IN ('', '-', '--', '---')
+    OR TRIM(COALESCE(p.issn_e, '')) NOT IN ('', '-', '--', '---')
+  )
+)`;
+const STRICT_PUBLICATION_IDENTIFIER_SQL = `(
+  ${HAS_REAL_DOI_SQL}
+  OR ${HAS_REAL_HANDLE_SQL}
+  OR ${HAS_REAL_TOP_LEVEL_BOOK_OR_SERIAL_SQL}
+)`;
 
 function normalizeOrcid(orcid) {
   return normalizeOrcidToken(orcid);
@@ -99,14 +114,45 @@ function isThesisPublication(row) {
 }
 
 function mapRenatiLevelUri(tipoTesis) {
-  const key = normalizeTextKey(tipoTesis);
+  const key = normalizeTextKey(tipoTesis).replace(/_/g, ' ');
 
   if (!key) return null;
   if (key.includes('maestr')) {
     return `${VOCABULARIES.RENATI_LEVEL}#maestro`;
   }
+  if (key.includes('doctor')) {
+    return `${VOCABULARIES.RENATI_LEVEL}#doctor`;
+  }
+  if (key.includes('bachiller')) {
+    return `${VOCABULARIES.RENATI_LEVEL}#bachiller`;
+  }
+  if (key.includes('titulo profesional') || key.includes('título profesional') || key.includes('licenciatura')) {
+    return `${VOCABULARIES.RENATI_LEVEL}#tituloProfesional`;
+  }
+  if (key.includes('segunda especialidad')) {
+    return `${VOCABULARIES.RENATI_LEVEL}#tituloSegundaEspecialidad`;
+  }
 
   return null;
+}
+
+function mapRenatiWorkTypeUri(tipoDoc) {
+  const key = normalizeTextKey(tipoDoc).replace(/_/g, ' ');
+
+  if (!key || key === '-' || key.startsWith('asesoria')) {
+    return RENATI_THESIS_TYPE_URI;
+  }
+  if (key.includes('trabajo de investigacion')) {
+    return `${VOCABULARIES.RENATI_TYPE}#trabajoDeInvestigacion`;
+  }
+  if (key.includes('trabajo de suficiencia profesional')) {
+    return `${VOCABULARIES.RENATI_TYPE}#trabajoDeSuficienciaProfesional`;
+  }
+  if (key.includes('trabajo academico')) {
+    return `${VOCABULARIES.RENATI_TYPE}#trabajoAcademico`;
+  }
+
+  return RENATI_THESIS_TYPE_URI;
 }
 
 function parseLanguage(languageValue) {
@@ -126,9 +172,45 @@ function normalizeIdentifierValue(value) {
   if (!value) return null;
 
   const trimmed = String(value).trim();
-  if (!trimmed || trimmed === '-') return null;
+  if (!trimmed || /^-+$/.test(trimmed)) return null;
+  if (/^(null|undefined)$/i.test(trimmed)) return null;
 
   return trimmed;
+}
+
+function normalizePublicationType(value) {
+  return normalizeCategory(value);
+}
+
+function humanizeThesisLevel(value) {
+  const key = normalizeTextKey(value).replace(/_/g, ' ');
+  if (!key) return null;
+  if (key.includes('maestr')) return 'Maestría';
+  if (key.includes('doctor')) return 'Doctorado';
+  if (key.includes('bachiller')) return 'Bachiller';
+  if (key.includes('titulo profesional') || key.includes('título profesional')) return 'Título profesional';
+  if (key.includes('licenciatura')) return 'Licenciatura';
+  if (key.includes('segunda especialidad')) return 'Segunda especialidad';
+  return String(value).trim();
+}
+
+function buildTopLevelIdentifiers(row) {
+  const publicationType = normalizePublicationType(row.tipo_publicacion);
+  const identifiers = filterEmpty([
+    normalizeIdentifierValue(row.doi) ? { Type: 'DOI', Value: normalizeIdentifierValue(row.doi) } : null,
+    normalizeIdentifierValue(row.uri) ? { Type: 'Handle', Value: normalizeIdentifierValue(row.uri) } : null,
+    !CONTAINER_IDENTIFIER_PUBLICATION_TYPES.has(publicationType) && normalizeIdentifierValue(row.isbn)
+      ? { Type: 'ISBN', Value: normalizeIdentifierValue(row.isbn) }
+      : null,
+    !CONTAINER_IDENTIFIER_PUBLICATION_TYPES.has(publicationType) && normalizeIdentifierValue(row.issn)
+      ? { Type: 'ISSN', Value: normalizeIdentifierValue(row.issn) }
+      : null,
+    !CONTAINER_IDENTIFIER_PUBLICATION_TYPES.has(publicationType) && normalizeIdentifierValue(row.issn_e)
+      ? { Type: 'ISSN', Value: normalizeIdentifierValue(row.issn_e) }
+      : null,
+  ]);
+
+  return dedupeTypedIdentifiers(identifiers);
 }
 
 function dedupeTypedIdentifiers(identifiers) {
@@ -224,7 +306,6 @@ function buildAuthorEntry(author) {
   const person = buildPersonFromAuthor(author);
   if (!person) return null;
 
-  const entry = { person };
   const normalizedEntry = { Person: person };
 
   if (author.orden !== null && author.orden !== undefined && author.orden !== '') {
@@ -265,7 +346,7 @@ function buildEditorEntryFromName(name) {
   };
 }
 
-function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCodes = [] } = {}) {
+function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes = [] } = {}) {
   const typeUri = PUBLICATION_TYPE_MAP[row.tipo_publicacion] || PUBLICATION_TYPE_MAP.default;
   const lastModified = toISO8601(row.updated_at);
   const titleValue = row.titulo ? String(row.titulo).trim() : '';
@@ -280,7 +361,7 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
     thesisPublication
       ? {
         Scheme: VOCABULARIES.RENATI_TYPE,
-        Value: RENATI_THESIS_TYPE_URI,
+        Value: mapRenatiWorkTypeUri(row.tipo_doc),
       }
       : null,
   ]);
@@ -306,13 +387,7 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
     publication.LastModified = lastModified;
   }
 
-  const identifiers = filterEmpty([
-    normalizeIdentifierValue(row.doi) ? { Type: 'DOI', Value: normalizeIdentifierValue(row.doi) } : null,
-    normalizeIdentifierValue(row.uri) ? { Type: 'Handle', Value: normalizeIdentifierValue(row.uri) } : null,
-    normalizeIdentifierValue(row.url) ? { Type: 'URL', Value: normalizeIdentifierValue(row.url) } : null,
-  ]);
-
-  const dedupedIdentifiers = dedupeTypedIdentifiers(identifiers);
+  const dedupedIdentifiers = buildTopLevelIdentifiers(row);
 
   if (dedupedIdentifiers.length > 0) {
     publication.Identifier = dedupedIdentifiers;
@@ -378,12 +453,17 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
   if (thesisPublication) {
     const qualification = {};
     const renatiLevelUri = mapRenatiLevelUri(row.tipo_tesis);
+    const qualificationTitle = humanizeThesisLevel(row.tipo_tesis || row.tipo_doc);
 
     if (renatiLevelUri) {
       qualification.Type = {
         Scheme: VOCABULARIES.RENATI_LEVEL,
         Value: renatiLevelUri,
       };
+    }
+
+    if (qualificationTitle) {
+      qualification.Title = filterEmpty([createTextValueEntry(qualificationTitle, 'es')]);
     }
 
     const grantorName = row.universidad ? String(row.universidad).trim() : '';
@@ -510,19 +590,29 @@ function mapToCerif(row, { authors = [], keywords = [], projectIds = [], ocdeCod
       }));
   }
 
-  if (projectIds.length > 0) {
+  if (origins.length > 0) {
     publication.OriginatesFrom = [];
 
-    for (const projectId of projectIds) {
+    for (const origin of origins) {
       publication.OriginatesFrom.push({
         Project: {
-          id: toCerifId('Projects', projectId),
+          id: toCerifId('Projects', origin.projectId),
+          ...(origin.projectName
+            ? {
+                Name: filterEmpty([createTextValueEntry(origin.projectName, 'es')]),
+              }
+            : {}),
         },
       });
 
       publication.OriginatesFrom.push({
         Funding: {
-          id: toCerifId('Fundings', `P${projectId}`),
+          id: toCerifId('Fundings', `P${origin.projectId}`),
+          ...(origin.projectName
+            ? {
+                Name: filterEmpty([createTextValueEntry(origin.projectName, 'es')]),
+              }
+            : {}),
         },
       });
     }
@@ -567,6 +657,8 @@ async function getPublicationContext(publicationId) {
     `
       SELECT DISTINCT
         pp.proyecto_id,
+        COALESCE(NULLIF(TRIM(pp.nombre_proyecto), ''), NULLIF(TRIM(p.titulo), '')) AS project_name,
+        NULLIF(TRIM(pp.entidad_financiadora), '') AS funder_name,
         o.codigo as ocde_codigo
       FROM Publicacion_proyecto pp
       LEFT JOIN Proyecto p ON pp.proyecto_id = p.id
@@ -578,13 +670,24 @@ async function getPublicationContext(publicationId) {
     [publicationId]
   );
 
-  const projectIds = [...new Set(originRows.map(row => row.proyecto_id).filter(Boolean))];
+  const origins = [];
+  const seenProjects = new Set();
+  for (const row of originRows) {
+    if (!row.proyecto_id || seenProjects.has(row.proyecto_id)) continue;
+    seenProjects.add(row.proyecto_id);
+    origins.push({
+      projectId: row.proyecto_id,
+      projectName: row.project_name ? String(row.project_name).trim() : null,
+      funderName: row.funder_name ? String(row.funder_name).trim() : null,
+    });
+  }
+
   const ocdeCodes = [...new Set(originRows.map(row => row.ocde_codigo).filter(Boolean))];
 
   return {
     authors,
     keywords,
-    projectIds,
+    origins,
     ocdeCodes,
   };
 }
@@ -605,6 +708,7 @@ export async function countPublications(from, until) {
       AND p.validado = 1
       AND p.updated_at IS NOT NULL
       AND p.updated_at >= '${MIN_VALID_UPDATED_AT}'
+      AND ${STRICT_PUBLICATION_IDENTIFIER_SQL}
   `;
 
   if (dateFilter.clause) {
@@ -630,6 +734,7 @@ export async function getPublications({ from, until, offset = 0, limit = env.PAG
       AND p.validado = 1
       AND p.updated_at IS NOT NULL
       AND p.updated_at >= '${MIN_VALID_UPDATED_AT}'
+      AND ${STRICT_PUBLICATION_IDENTIFIER_SQL}
   `;
 
   if (dateFilter.clause) {
@@ -674,6 +779,7 @@ export async function getPublicationHeaders({ from, until, offset = 0, limit = e
       AND p.validado = 1
       AND p.updated_at IS NOT NULL
       AND p.updated_at >= '${MIN_VALID_UPDATED_AT}'
+      AND ${STRICT_PUBLICATION_IDENTIFIER_SQL}
   `;
 
   if (dateFilter.clause) {
@@ -706,6 +812,7 @@ export async function getPublicationById(id) {
         AND p.validado = 1
         AND p.updated_at IS NOT NULL
         AND p.updated_at >= ?
+        AND ${STRICT_PUBLICATION_IDENTIFIER_SQL}
     `,
     [id, MIN_VALID_UPDATED_AT]
   );

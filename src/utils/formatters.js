@@ -183,6 +183,8 @@ export function createSchemeValueEntry(scheme, value) {
 
   const normalized = String(value).trim();
   if (!normalized || normalized === '0') return null;
+  if (/^[-]+$/.test(normalized)) return null;
+  if (/^(null|undefined)$/i.test(normalized)) return null;
 
   return {
     Scheme: scheme,

@@ -24,6 +24,50 @@ const ROOT_ORGUNIT = {
   id: toCerifId('OrgUnits', '1'),
   name: 'Universidad Nacional Mayor de San Marcos',
 };
+const EXTERNAL_FUNDING_TOTAL = `
+  (
+    COALESCE(p.aporte_no_unmsm, 0)
+    + COALESCE(p.financiamiento_fuente_externa, 0)
+    + COALESCE(p.entidad_asociada, 0)
+  )
+`;
+const PROJECT_HAS_FUNDING_DATA = `
+  (
+    (p.codigo_proyecto IS NOT NULL AND TRIM(p.codigo_proyecto) <> '')
+    OR p.convocatoria IS NOT NULL
+    OR (
+      COALESCE(p.aporte_unmsm, 0)
+      + COALESCE(p.aporte_no_unmsm, 0)
+      + COALESCE(p.financiamiento_fuente_externa, 0)
+      + COALESCE(p.entidad_asociada, 0)
+    ) > 0
+  )
+`;
+const REAL_EXTERNAL_PROJECT = `
+  (
+    LOWER(TRIM(COALESCE(p.tipo_proyecto, ''))) = 'pfex'
+    OR ${EXTERNAL_FUNDING_TOTAL} > 0
+  )
+`;
+const PROJECT_HAS_REAL_PI = `
+  EXISTS (
+    SELECT 1
+    FROM Proyecto_integrante pi2
+    LEFT JOIN Proyecto_integrante_tipo pit2 ON pit2.id = pi2.proyecto_integrante_tipo_id
+    WHERE pi2.proyecto_id = p.id
+      AND IFNULL(pi2.estado, 1) = 1
+      AND pi2.investigador_id IS NOT NULL
+      AND LOWER(TRIM(CONCAT_WS(' ', COALESCE(pit2.nombre, ''), COALESCE(pi2.condicion, ''), COALESCE(pi2.responsabilidad, ''))))
+        REGEXP 'responsable|investigador principal|coordinador'
+  )
+`;
+const STRICT_PROJECT_ELIGIBILITY = `
+  (
+    ${PROJECT_HAS_FUNDING_DATA}
+    AND ${PROJECT_HAS_REAL_PI}
+    AND (NOT ${REAL_EXTERNAL_PROJECT} OR ef.external_funder_count = 1)
+  )
+`;
 
 function getProjectTypes(row) {
   const types = [];
@@ -63,8 +107,19 @@ function hasFundingData(row) {
 }
 
 function buildParticipantRole(integrante) {
-  const rawRole = String(integrante.tipo_nombre || integrante.condicion || '').trim();
+  const rawRole = String(integrante.tipo_nombre || integrante.condicion || integrante.responsabilidad || '').trim();
   return rawRole || null;
+}
+
+function normalizeHumanText(value) {
+  if (!value) return null;
+
+  const normalized = String(value).trim().replace(/\s+/g, ' ');
+  if (!normalized || normalized === '-' || normalized === '--' || normalized === '---') {
+    return null;
+  }
+
+  return normalized;
 }
 
 function normalizeRoleKey(value) {
@@ -141,13 +196,6 @@ function buildTeam(integrantes) {
     });
   }
 
-  if (principalInvestigators.length === 0 && members.length > 0) {
-    principalInvestigators.push({
-      Person: members[0].Person,
-    });
-    members.shift();
-  }
-
   if (principalInvestigators.length === 0) {
     return null;
   }
@@ -197,16 +245,10 @@ function buildConsortium(row) {
 function buildFunded(row) {
   if (!hasFundingData(row)) return null;
 
-  const externalTotal =
-    Number(row.aporte_no_unmsm || 0)
-    + Number(row.financiamiento_fuente_externa || 0)
-    + Number(row.entidad_asociada || 0);
-
-  const by = externalTotal > 0
+  const by = row.is_external_project
     ? {
         OrgUnit: {
-          id: toCerifId('OrgUnits', `ExternalFundingSource/${row.id}`),
-          name: 'Fuente financiadora externa',
+          name: row.external_funder_name,
         },
       }
     : {
@@ -218,9 +260,13 @@ function buildFunded(row) {
     As: {
       Funding: {
         id: toCerifId('Fundings', `P${row.id}`),
-        Name: filterEmpty([
-          createTextValueEntry(row.titulo || row.codigo_proyecto || `Financiamiento ${row.id}`, 'es'),
-        ]),
+        ...(normalizeHumanText(row.titulo || row.codigo_proyecto)
+          ? {
+              Name: filterEmpty([
+                createTextValueEntry(normalizeHumanText(row.titulo || row.codigo_proyecto), 'es'),
+              ]),
+            }
+          : {}),
       },
     },
   };
@@ -329,6 +375,7 @@ async function getProjectParticipants(projectId) {
       SELECT
         pi.investigador_id,
         pi.condicion,
+        pi.responsabilidad,
         ui.nombres,
         ui.apellido1,
         ui.apellido2,
@@ -372,7 +419,25 @@ async function getProjectEquipments(groupId) {
  */
 export async function countProjects(from, until) {
   const dateFilter = buildDateFilter(from, until, 'p.updated_at');
-  let query = 'SELECT COUNT(*) as total FROM Proyecto p WHERE p.estado >= 1';
+  let query = `
+    SELECT COUNT(*) as total
+    FROM Proyecto p
+    LEFT JOIN (
+      SELECT
+        pp.proyecto_id,
+        COUNT(DISTINCT UPPER(TRIM(pp.entidad_financiadora))) AS external_funder_count,
+        MIN(TRIM(pp.entidad_financiadora)) AS external_funder_name
+      FROM Publicacion_proyecto pp
+      WHERE IFNULL(pp.estado, 1) = 1
+        AND pp.proyecto_id IS NOT NULL
+        AND pp.entidad_financiadora IS NOT NULL
+        AND TRIM(pp.entidad_financiadora) <> ''
+        AND UPPER(TRIM(pp.entidad_financiadora)) <> 'UNMSM'
+      GROUP BY pp.proyecto_id
+    ) ef ON ef.proyecto_id = p.id
+    WHERE p.estado >= 1
+      AND ${STRICT_PROJECT_ELIGIBILITY}
+  `;
 
   if (dateFilter.clause) {
     query += ` AND ${dateFilter.clause}`;
@@ -398,14 +463,38 @@ export async function getProjects({ from, until, offset = 0, limit = env.PAGE_SI
       o.codigo as ocde_codigo,
       o.linea as ocde_linea,
       li.nombre as linea_nombre,
-      pd.detalle as proyecto_descripcion
+      pd.resumen as proyecto_descripcion,
+      ef.external_funder_count,
+      ef.external_funder_name,
+      CASE
+        WHEN LOWER(TRIM(COALESCE(p.tipo_proyecto, ''))) = 'pfex' OR ${EXTERNAL_FUNDING_TOTAL} > 0 THEN 1
+        ELSE 0
+      END AS is_external_project
     FROM Proyecto p
     LEFT JOIN Facultad f ON p.facultad_id = f.id
     LEFT JOIN Grupo g ON p.grupo_id = g.id
     LEFT JOIN Ocde o ON p.ocde_id = o.id
     LEFT JOIN Linea_investigacion li ON p.linea_investigacion_id = li.id
-    LEFT JOIN Proyecto_descripcion pd ON p.id = pd.proyecto_id
+    LEFT JOIN (
+      SELECT proyecto_id, MAX(CASE WHEN codigo = 'resumen' THEN detalle END) AS resumen
+      FROM Proyecto_descripcion
+      GROUP BY proyecto_id
+    ) pd ON p.id = pd.proyecto_id
+    LEFT JOIN (
+      SELECT
+        pp.proyecto_id,
+        COUNT(DISTINCT UPPER(TRIM(pp.entidad_financiadora))) AS external_funder_count,
+        MIN(TRIM(pp.entidad_financiadora)) AS external_funder_name
+      FROM Publicacion_proyecto pp
+      WHERE IFNULL(pp.estado, 1) = 1
+        AND pp.proyecto_id IS NOT NULL
+        AND pp.entidad_financiadora IS NOT NULL
+        AND TRIM(pp.entidad_financiadora) <> ''
+        AND UPPER(TRIM(pp.entidad_financiadora)) <> 'UNMSM'
+      GROUP BY pp.proyecto_id
+    ) ef ON ef.proyecto_id = p.id
     WHERE p.estado >= 1
+      AND ${STRICT_PROJECT_ELIGIBILITY}
   `;
 
   if (dateFilter.clause) {
@@ -451,7 +540,20 @@ export async function getProjectHeaders({ from, until, offset = 0, limit = env.P
   let query = `
     SELECT p.id, p.updated_at
     FROM Proyecto p
+    LEFT JOIN (
+      SELECT
+        pp.proyecto_id,
+        COUNT(DISTINCT UPPER(TRIM(pp.entidad_financiadora))) AS external_funder_count
+      FROM Publicacion_proyecto pp
+      WHERE IFNULL(pp.estado, 1) = 1
+        AND pp.proyecto_id IS NOT NULL
+        AND pp.entidad_financiadora IS NOT NULL
+        AND TRIM(pp.entidad_financiadora) <> ''
+        AND UPPER(TRIM(pp.entidad_financiadora)) <> 'UNMSM'
+      GROUP BY pp.proyecto_id
+    ) ef ON ef.proyecto_id = p.id
     WHERE p.estado >= 1
+      AND ${STRICT_PROJECT_ELIGIBILITY}
   `;
 
   if (dateFilter.clause) {
@@ -484,15 +586,39 @@ export async function getProjectById(id) {
         o.codigo as ocde_codigo,
         o.linea as ocde_linea,
         li.nombre as linea_nombre,
-        pd.detalle as proyecto_descripcion
+        pd.resumen as proyecto_descripcion,
+        ef.external_funder_count,
+        ef.external_funder_name,
+        CASE
+          WHEN LOWER(TRIM(COALESCE(p.tipo_proyecto, ''))) = 'pfex' OR ${EXTERNAL_FUNDING_TOTAL} > 0 THEN 1
+          ELSE 0
+        END AS is_external_project
       FROM Proyecto p
       LEFT JOIN Facultad f ON p.facultad_id = f.id
       LEFT JOIN Grupo g ON p.grupo_id = g.id
       LEFT JOIN Ocde o ON p.ocde_id = o.id
       LEFT JOIN Linea_investigacion li ON p.linea_investigacion_id = li.id
-      LEFT JOIN Proyecto_descripcion pd ON p.id = pd.proyecto_id
+      LEFT JOIN (
+        SELECT proyecto_id, MAX(CASE WHEN codigo = 'resumen' THEN detalle END) AS resumen
+        FROM Proyecto_descripcion
+        GROUP BY proyecto_id
+      ) pd ON p.id = pd.proyecto_id
+      LEFT JOIN (
+        SELECT
+          pp.proyecto_id,
+          COUNT(DISTINCT UPPER(TRIM(pp.entidad_financiadora))) AS external_funder_count,
+          MIN(TRIM(pp.entidad_financiadora)) AS external_funder_name
+        FROM Publicacion_proyecto pp
+        WHERE IFNULL(pp.estado, 1) = 1
+          AND pp.proyecto_id IS NOT NULL
+          AND pp.entidad_financiadora IS NOT NULL
+          AND TRIM(pp.entidad_financiadora) <> ''
+          AND UPPER(TRIM(pp.entidad_financiadora)) <> 'UNMSM'
+        GROUP BY pp.proyecto_id
+      ) ef ON ef.proyecto_id = p.id
       WHERE p.id = ?
         AND p.estado >= 1
+        AND ${STRICT_PROJECT_ELIGIBILITY}
     `,
     [id]
   );

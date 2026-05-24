@@ -22,6 +22,13 @@ const ROOT_ORGUNIT = {
   acronym: 'UNMSM',
   name: 'Universidad Nacional Mayor de San Marcos',
 };
+const EXTERNAL_FUNDING_TOTAL = `
+  (
+    COALESCE(p.aporte_no_unmsm, 0)
+    + COALESCE(p.financiamiento_fuente_externa, 0)
+    + COALESCE(p.entidad_asociada, 0)
+  )
+`;
 const FUNDING_APORTE_TOTAL = `
   (
     COALESCE(p.aporte_unmsm, 0)
@@ -44,6 +51,18 @@ const FUNDING_ELIGIBILITY = `
     OR p.convocatoria IS NOT NULL
   )
 `;
+const REAL_EXTERNAL_PROJECT = `
+  (
+    LOWER(TRIM(COALESCE(p.tipo_proyecto, ''))) = 'pfex'
+    OR ${EXTERNAL_FUNDING_TOTAL} > 0
+  )
+`;
+const STRICT_FUNDING_ELIGIBILITY = `
+  (
+    ${FUNDING_ELIGIBILITY}
+    AND (NOT ${REAL_EXTERNAL_PROJECT} OR ef.external_funder_count = 1)
+  )
+`;
 
 function parseFundingProjectId(id) {
   const value = String(id || '').trim();
@@ -56,13 +75,7 @@ function parseFundingProjectId(id) {
 }
 
 function buildFundingType(row) {
-  const externalTotal =
-    Number(row.aporte_no_unmsm || 0)
-    + Number(row.financiamiento_fuente_externa || 0)
-    + Number(row.entidad_asociada || 0);
-
-  if (row.convocatoria) return FUNDING_TYPE_VALUES.CALL;
-  if (externalTotal > 0) return FUNDING_TYPE_VALUES.GRANT;
+  if (row.is_external_project || row.parent_funding_id) return FUNDING_TYPE_VALUES.GRANT;
   return FUNDING_TYPE_VALUES.INTERNAL;
 }
 
@@ -108,26 +121,88 @@ function buildFundingName(row) {
   return `Financiamiento del proyecto ${row.id}`;
 }
 
-function buildParentFunding(row) {
-  if (row.convocatoria) {
-    return {
-      Funding: {
-        id: toCerifId(ENTITY_TYPE, `C${row.convocatoria}`),
-        Name: filterEmpty([
-          createTextValueEntry(`Convocatoria ${row.tipo_proyecto || row.convocatoria}`, 'es'),
-        ]),
-      },
-    };
+function normalizeHumanText(value) {
+  if (!value) return null;
+
+  const normalized = String(value).trim().replace(/\s+/g, ' ');
+  if (!normalized || normalized === '-' || normalized === '--' || normalized === '---') {
+    return null;
   }
 
-  if (!row.tipo_proyecto) return null;
+  return normalized;
+}
+
+function buildFundingDisplayName(parts) {
+  const uniqueParts = [...new Set(filterEmpty(parts.map(normalizeHumanText)))];
+  if (uniqueParts.length === 0) return null;
+  return uniqueParts.join(' - ');
+}
+
+function getRelevantConvocatoria(row) {
+  const current = row.convocatoria_id
+    ? {
+        id: row.convocatoria_id,
+        tipo: row.convocatoria_tipo,
+        evento: row.convocatoria_evento,
+        descripcion: row.convocatoria_descripcion,
+        periodo: row.convocatoria_periodo,
+        parentId: row.convocatoria_parent_id,
+      }
+    : null;
+  const parent = row.convocatoria_parent_real_id
+    ? {
+        id: row.convocatoria_parent_real_id,
+        tipo: row.convocatoria_parent_real_tipo,
+        evento: row.convocatoria_parent_real_evento,
+        descripcion: row.convocatoria_parent_real_descripcion,
+        periodo: row.convocatoria_parent_real_periodo,
+        parentId: row.convocatoria_parent_real_parent_id,
+      }
+    : null;
+  const grandparent = row.convocatoria_grandparent_id
+    ? {
+        id: row.convocatoria_grandparent_id,
+        tipo: row.convocatoria_grandparent_tipo,
+        evento: row.convocatoria_grandparent_evento,
+        descripcion: row.convocatoria_grandparent_descripcion,
+        periodo: row.convocatoria_grandparent_periodo,
+        parentId: null,
+      }
+    : null;
+
+  if (!current) return null;
+
+  const currentEvent = normalizeHumanText(current.evento)?.toLowerCase();
+  if ((currentEvent === 'calendario' || currentEvent === 'evaluacion') && parent) {
+    const parentEvent = normalizeHumanText(parent.evento)?.toLowerCase();
+    if ((parentEvent === 'calendario' || parentEvent === 'evaluacion') && grandparent) {
+      return grandparent;
+    }
+    return parent;
+  }
+
+  return current;
+}
+
+function buildParentFunding(row) {
+  const convocatoria = getRelevantConvocatoria(row);
+  if (!convocatoria) return null;
+
+  const name = buildFundingDisplayName([
+    convocatoria.descripcion,
+    convocatoria.evento,
+    convocatoria.tipo,
+    convocatoria.periodo,
+  ]);
 
   return {
     Funding: {
-      id: toCerifId(ENTITY_TYPE, `T${row.tipo_proyecto}`),
-      Name: filterEmpty([
-        createTextValueEntry(`Programa ${row.tipo_proyecto}`, 'es'),
-      ]),
+      id: toCerifId(ENTITY_TYPE, `C${convocatoria.id}`),
+      ...(name
+        ? {
+            Name: filterEmpty([createTextValueEntry(name, 'es')]),
+          }
+        : {}),
     },
   };
 }
@@ -135,12 +210,8 @@ function buildParentFunding(row) {
 function buildFunders(row) {
   const funders = [];
   const internalAmount = Number(row.aporte_unmsm || 0);
-  const externalTotal =
-    Number(row.aporte_no_unmsm || 0)
-    + Number(row.financiamiento_fuente_externa || 0)
-    + Number(row.entidad_asociada || 0);
 
-  if (internalAmount > 0 || externalTotal <= 0) {
+  if (internalAmount > 0 || !row.is_external_project) {
     funders.push({
       OrgUnit: {
         id: ROOT_ORGUNIT.id,
@@ -150,16 +221,26 @@ function buildFunders(row) {
     });
   }
 
-  if (externalTotal > 0) {
+  if (row.external_funder_name) {
     funders.push({
       OrgUnit: {
-        id: toCerifId('OrgUnits', `ExternalFundingSource/${row.id}`),
-        name: 'Fuente financiadora externa',
+        name: row.external_funder_name,
       },
     });
   }
 
   return funders;
+}
+
+function buildDescription(row) {
+  const descriptionParts = [];
+  descriptionParts.push(...buildBudgetBreakdown(row));
+  if (row.tipo_proyecto) descriptionParts.push(`Tipo de proyecto: ${row.tipo_proyecto}`);
+  if (row.facultad_nombre) descriptionParts.push(`Facultad: ${row.facultad_nombre}`);
+
+  return descriptionParts.length > 0
+    ? filterEmpty([createTextValueEntry(descriptionParts.join('. '), 'es')])
+    : null;
 }
 
 function mapToCerif(row) {
@@ -170,6 +251,7 @@ function mapToCerif(row) {
   const fundingType = buildFundingType(row);
   const funders = buildFunders(row);
   const parentFunding = buildParentFunding(row);
+  const description = buildDescription(row);
 
   const funding = {
     '@id': toCerifId(ENTITY_TYPE, fundingId),
@@ -226,15 +308,8 @@ function mapToCerif(row) {
     };
   }
 
-  const descriptionParts = [];
-  descriptionParts.push(...buildBudgetBreakdown(row));
-  if (row.tipo_proyecto) descriptionParts.push(`Tipo de proyecto: ${row.tipo_proyecto}`);
-  if (row.facultad_nombre) descriptionParts.push(`Facultad: ${row.facultad_nombre}`);
-
-  if (descriptionParts.length > 0) {
-    funding.Description = filterEmpty([
-      createTextValueEntry(descriptionParts.join('. '), 'es'),
-    ]);
+  if (description) {
+    funding.Description = description;
   }
 
   if (row.tipo_proyecto) {
@@ -263,6 +338,29 @@ function getBaseFundingSelect() {
       p.entidad_asociada,
       p.updated_at,
       f.nombre as facultad_nombre,
+      c.id AS convocatoria_id,
+      c.tipo AS convocatoria_tipo,
+      c.evento AS convocatoria_evento,
+      c.descripcion AS convocatoria_descripcion,
+      c.periodo AS convocatoria_periodo,
+      c.parent_id AS convocatoria_parent_id,
+      cp.id AS convocatoria_parent_real_id,
+      cp.tipo AS convocatoria_parent_real_tipo,
+      cp.evento AS convocatoria_parent_real_evento,
+      cp.descripcion AS convocatoria_parent_real_descripcion,
+      cp.periodo AS convocatoria_parent_real_periodo,
+      cp.parent_id AS convocatoria_parent_real_parent_id,
+      cgp.id AS convocatoria_grandparent_id,
+      cgp.tipo AS convocatoria_grandparent_tipo,
+      cgp.evento AS convocatoria_grandparent_evento,
+      cgp.descripcion AS convocatoria_grandparent_descripcion,
+      cgp.periodo AS convocatoria_grandparent_periodo,
+      ef.external_funder_count,
+      ef.external_funder_name,
+      CASE
+        WHEN LOWER(TRIM(COALESCE(p.tipo_proyecto, ''))) = 'pfex' OR ${EXTERNAL_FUNDING_TOTAL} > 0 THEN 1
+        ELSE 0
+      END AS is_external_project,
       pb.monto_presupuesto_total,
       pb.monto_bienes,
       pb.monto_servicios,
@@ -270,6 +368,22 @@ function getBaseFundingSelect() {
       sv.monto_subvencion
     FROM Proyecto p
     LEFT JOIN Facultad f ON f.id = p.facultad_id
+    LEFT JOIN Convocatoria c ON c.id = p.convocatoria
+    LEFT JOIN Convocatoria cp ON cp.id = c.parent_id
+    LEFT JOIN Convocatoria cgp ON cgp.id = cp.parent_id
+    LEFT JOIN (
+      SELECT
+        pp.proyecto_id,
+        COUNT(DISTINCT UPPER(TRIM(pp.entidad_financiadora))) AS external_funder_count,
+        MIN(TRIM(pp.entidad_financiadora)) AS external_funder_name
+      FROM Publicacion_proyecto pp
+      WHERE IFNULL(pp.estado, 1) = 1
+        AND pp.proyecto_id IS NOT NULL
+        AND pp.entidad_financiadora IS NOT NULL
+        AND TRIM(pp.entidad_financiadora) <> ''
+        AND UPPER(TRIM(pp.entidad_financiadora)) <> 'UNMSM'
+      GROUP BY pp.proyecto_id
+    ) ef ON ef.proyecto_id = p.id
     LEFT JOIN (
       SELECT
         pp.proyecto_id,
@@ -294,7 +408,7 @@ function getBaseFundingSelect() {
       GROUP BY proyecto_id
     ) sv ON sv.proyecto_id = p.id
     WHERE p.estado >= 1
-      AND ${FUNDING_ELIGIBILITY}
+      AND ${STRICT_FUNDING_ELIGIBILITY}
   `;
 }
 
@@ -310,8 +424,20 @@ export async function countFunding(from, until) {
   let query = `
     SELECT COUNT(*) as total
     FROM Proyecto p
+    LEFT JOIN (
+      SELECT
+        pp.proyecto_id,
+        COUNT(DISTINCT UPPER(TRIM(pp.entidad_financiadora))) AS external_funder_count
+      FROM Publicacion_proyecto pp
+      WHERE IFNULL(pp.estado, 1) = 1
+        AND pp.proyecto_id IS NOT NULL
+        AND pp.entidad_financiadora IS NOT NULL
+        AND TRIM(pp.entidad_financiadora) <> ''
+        AND UPPER(TRIM(pp.entidad_financiadora)) <> 'UNMSM'
+      GROUP BY pp.proyecto_id
+    ) ef ON ef.proyecto_id = p.id
     WHERE p.estado >= 1
-      AND ${FUNDING_ELIGIBILITY}
+      AND ${STRICT_FUNDING_ELIGIBILITY}
   `;
 
   if (dateFilter.clause) {
