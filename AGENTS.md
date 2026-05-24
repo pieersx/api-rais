@@ -80,6 +80,14 @@
 - Thesis jurors are not structurally modeled in the current DB. Do not synthesize them from text.
 - `Publicacion_revista` exists and can be used to enrich journal container metadata (`ISSN`, `ISSNE`, `revista`, `casa`, `isi`) if needed.
 
+## CONCYTEC corrections implemented (May 24, 2026)
+- **PROJECT_TYPE_CONCYTEC_MAP**: Removed `ECI: 'http://purl.org/pe-repo/concytec/terminos#equipamientoCientifico'` mapping as CONCYTEC explicitly rejected this value. Only OCDE project types are now included.
+- **Patent structures**: Corrected `Inventors`, `Holders`, and `Issuer` OrgUnit structures for full CERIF compliance:
+  - `Inventors.Inventor.Person.PersonName.FullName` instead of `Person.name`
+  - `Holders.Holder.OrgUnit.Name` as array of text value entries instead of string
+  - `Issuer.OrgUnit.Acronym` and `Issuer.OrgUnit.Name` capitalized and as array of text value entries
+- All changes verified with GetRecord and ListRecords OAI-PMH tests; structure is production-ready for CONCYTEC harvesting.
+
 ## Real DB coverage discovered during this workstream
 - Projects active: `6690`.
 - Projects with structured funding data: `5970`.

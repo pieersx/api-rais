@@ -1,49 +1,45 @@
-import pool from '../config/database.js';
-import { env } from '../config/env.js';
+import pool from '../config/database.js'
+import { env } from '../config/env.js'
+import { NAMESPACES, PATENT_TYPE_MAP } from '../utils/constants.js'
 import {
-  toOAIIdentifier,
-  toCerifId,
-  toISO8601,
-  filterEmpty,
   buildDateFilter,
   createSchemeValueEntry,
   createTextValueEntry,
+  filterEmpty,
   inferIPCClassification,
   normalizeOrcidToken,
-} from '../utils/formatters.js';
-import {
-  PATENT_TYPE_MAP,
-  VOCABULARIES,
-  NAMESPACES,
-} from '../utils/constants.js';
+  toCerifId,
+  toISO8601,
+  toOAIIdentifier,
+} from '../utils/formatters.js'
 
-const ENTITY_TYPE = 'Patents';
+const ENTITY_TYPE = 'Patents'
 
 function normalizeOrcid(orcid) {
-  return normalizeOrcidToken(orcid);
+  return normalizeOrcidToken(orcid)
 }
 
 function buildPatentHeader(row) {
   const header = {
     identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
     setSpec: 'patents',
-  };
-
-  const datestamp = toISO8601(row.updated_at);
-  if (datestamp) {
-    header.datestamp = datestamp;
   }
 
-  return header;
+  const datestamp = toISO8601(row.updated_at)
+  if (datestamp) {
+    header.datestamp = datestamp
+  }
+
+  return header
 }
 
 function mapToCerif(row, inventors = [], holders = []) {
-  const typeUri = PATENT_TYPE_MAP[row.tipo] || PATENT_TYPE_MAP.default;
-  const ipcClassification = inferIPCClassification(row);
-  const lastModified = toISO8601(row.updated_at);
-  const title = filterEmpty([createTextValueEntry(row.titulo, 'es')]);
-  const patentNumber = String(row.nro_registro || '').trim();
-  const abstractParts = [];
+  const typeUri = PATENT_TYPE_MAP[row.tipo] || PATENT_TYPE_MAP.default
+  const ipcClassification = inferIPCClassification(row)
+  const lastModified = toISO8601(row.updated_at)
+  const title = filterEmpty([createTextValueEntry(row.titulo, 'es')])
+  const patentNumber = String(row.nro_registro || '').trim()
+  const abstractParts = []
 
   const patent = {
     '@id': toCerifId(ENTITY_TYPE, row.id),
@@ -56,102 +52,140 @@ function mapToCerif(row, inventors = [], holders = []) {
       },
     ],
     CountryCode: 'PE',
-  };
+  }
 
   if (patentNumber) {
-    patent.PatentNumber = patentNumber;
+    patent.PatentNumber = patentNumber
   }
 
   if (title.length > 0) {
-    patent.Title = title;
+    patent.Title = title
   }
 
   if (lastModified) {
-    patent.LastModified = lastModified;
+    patent.LastModified = lastModified
   }
 
   if (ipcClassification.note) {
-    patent.Notes = [ipcClassification.note];
+    patent.Notes = [ipcClassification.note]
   }
 
   if (inventors.length > 0) {
     patent.Inventors = {
-      Inventor: inventors.map(inventor => {
-      const fullName = [inventor.nombres, inventor.apellido1, inventor.apellido2]
-        .filter(Boolean)
-        .join(' ')
-        .trim();
+      Inventor: inventors.map((inventor) => {
+        const fullName = [
+          inventor.nombres,
+          inventor.apellido1,
+          inventor.apellido2,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .trim()
 
-      const person = {
-        name: fullName,
-      };
+        const person = {
+          PersonName: {
+            FullName: fullName,
+          },
+        }
 
-      if (inventor.investigador_id) {
-        person.id = toCerifId('Persons', inventor.investigador_id);
-      }
+        if (inventor.investigador_id) {
+          person.id = toCerifId('Persons', inventor.investigador_id)
+        }
 
-      const identifiers = [];
-      if (inventor.doc_numero) {
-        identifiers.push(createSchemeValueEntry('http://purl.org/pe-repo/concytec/terminos#dni', inventor.doc_numero));
-      }
-      if (inventor.codigo_orcid) {
-        identifiers.push(createSchemeValueEntry('https://orcid.org', normalizeOrcid(inventor.codigo_orcid)));
-      }
+        const identifiers = []
+        if (inventor.doc_numero) {
+          identifiers.push(
+            createSchemeValueEntry(
+              'http://purl.org/pe-repo/concytec/terminos#dni',
+              inventor.doc_numero
+            )
+          )
+        }
+        if (inventor.codigo_orcid) {
+          identifiers.push(
+            createSchemeValueEntry(
+              'https://orcid.org',
+              normalizeOrcid(inventor.codigo_orcid)
+            )
+          )
+        }
 
-      const filteredIdentifiers = filterEmpty(identifiers);
-      if (filteredIdentifiers.length > 0) {
-        person.Identifier = filteredIdentifiers;
-      }
+        const filteredIdentifiers = filterEmpty(identifiers)
+        if (filteredIdentifiers.length > 0) {
+          person.Identifier = filteredIdentifiers
+        }
 
-      return { Person: person };
-    }),
-    };
+        return { Person: person }
+      }),
+    }
   }
 
-  const holderItems = [];
-  holderItems.push(...holders.map(holder => ({ OrgUnit: { name: holder.titular } })));
+  const holderItems = []
+  holderItems.push(
+    ...holders.map((holder) => ({
+      OrgUnit: {
+        Name: filterEmpty([createTextValueEntry(holder.titular, 'es')]),
+      },
+    }))
+  )
 
-  if (row.titular1) holderItems.push({ OrgUnit: { name: row.titular1 } });
-  if (row.titular2) holderItems.push({ OrgUnit: { name: row.titular2 } });
+  if (row.titular1)
+    holderItems.push({
+      OrgUnit: {
+        Name: filterEmpty([createTextValueEntry(row.titular1, 'es')]),
+      },
+    })
+  if (row.titular2)
+    holderItems.push({
+      OrgUnit: {
+        Name: filterEmpty([createTextValueEntry(row.titular2, 'es')]),
+      },
+    })
 
   if (holderItems.length > 0) {
     patent.Holders = {
       Holder: holderItems,
-    };
+    }
   }
 
   patent.Issuer = {
     OrgUnit: {
-      acronym: 'INDECOPI',
-      name: 'Instituto Nacional de Defensa de la Competencia y de la Protección de la Propiedad Intelectual',
+      Acronym: 'INDECOPI',
+      Name: filterEmpty([
+        createTextValueEntry(
+          'Instituto Nacional de Defensa de la Competencia y de la Protección de la Propiedad Intelectual',
+          'es'
+        ),
+      ]),
     },
-  };
+  }
 
   if (row.fecha_presentacion) {
-    patent.RegistrationDate = row.fecha_presentacion instanceof Date
-      ? row.fecha_presentacion.toISOString().split('T')[0]
-      : row.fecha_presentacion;
+    patent.RegistrationDate =
+      row.fecha_presentacion instanceof Date
+        ? row.fecha_presentacion.toISOString().split('T')[0]
+        : row.fecha_presentacion
   }
 
   if (row.comentario) {
-    abstractParts.push(String(row.comentario).trim());
+    abstractParts.push(String(row.comentario).trim())
   }
 
   if (row.enlace) {
-    patent.URL = row.enlace;
+    patent.URL = row.enlace
   }
 
   if (row.nro_expediente) {
-    abstractParts.push(`Expediente: ${row.nro_expediente}`);
+    abstractParts.push(`Expediente: ${row.nro_expediente}`)
   }
 
   if (abstractParts.length > 0) {
     patent.Abstract = filterEmpty([
       createTextValueEntry(abstractParts.join('. '), 'es'),
-    ]);
+    ])
   }
 
-  return patent;
+  return patent
 }
 
 async function getPatentContext(patentId) {
@@ -170,7 +204,7 @@ async function getPatentContext(patentId) {
       ORDER BY pa.id
     `,
     [patentId]
-  );
+  )
 
   const [holders] = await pool.query(
     `
@@ -180,19 +214,19 @@ async function getPatentContext(patentId) {
       ORDER BY id
     `,
     [patentId]
-  );
+  )
 
-  const mappedInventors = inventors.map(inventor => ({
+  const mappedInventors = inventors.map((inventor) => ({
     ...inventor,
     nombres: inventor.nombres || inventor.ui_nombres,
     apellido1: inventor.apellido1 || inventor.ui_apellido1,
     apellido2: inventor.apellido2 || inventor.ui_apellido2,
-  }));
+  }))
 
   return {
     inventors: mappedInventors,
     holders,
-  };
+  }
 }
 
 /**
@@ -202,16 +236,16 @@ async function getPatentContext(patentId) {
  * @returns {Promise<number>}
  */
 export async function countPatents(from, until) {
-  const dateFilter = buildDateFilter(from, until, 'p.updated_at');
+  const dateFilter = buildDateFilter(from, until, 'p.updated_at')
 
-  let query = 'SELECT COUNT(*) as total FROM Patente p WHERE p.estado = 1';
+  let query = 'SELECT COUNT(*) as total FROM Patente p WHERE p.estado = 1'
 
   if (dateFilter.clause) {
-    query += ` AND ${dateFilter.clause}`;
+    query += ` AND ${dateFilter.clause}`
   }
 
-  const [rows] = await pool.query(query, dateFilter.params);
-  return rows[0].total;
+  const [rows] = await pool.query(query, dateFilter.params)
+  return rows[0].total
 }
 
 /**
@@ -219,36 +253,41 @@ export async function countPatents(from, until) {
  * @param {object} options
  * @returns {Promise<Array>}
  */
-export async function getPatents({ from, until, offset = 0, limit = env.PAGE_SIZE }) {
-  const dateFilter = buildDateFilter(from, until, 'p.updated_at');
+export async function getPatents({
+  from,
+  until,
+  offset = 0,
+  limit = env.PAGE_SIZE,
+}) {
+  const dateFilter = buildDateFilter(from, until, 'p.updated_at')
 
   let query = `
     SELECT p.*
     FROM Patente p
     WHERE p.estado = 1
-  `;
+  `
 
   if (dateFilter.clause) {
-    query += ` AND ${dateFilter.clause}`;
+    query += ` AND ${dateFilter.clause}`
   }
 
-  query += ' ORDER BY p.id LIMIT ? OFFSET ?';
+  query += ' ORDER BY p.id LIMIT ? OFFSET ?'
 
-  const [rows] = await pool.query(query, [...dateFilter.params, limit, offset]);
+  const [rows] = await pool.query(query, [...dateFilter.params, limit, offset])
 
-  const results = [];
+  const results = []
   for (const row of rows) {
-    const context = await getPatentContext(row.id);
+    const context = await getPatentContext(row.id)
 
     results.push({
       header: buildPatentHeader(row),
       metadata: {
         Patent: mapToCerif(row, context.inventors, context.holders),
       },
-    });
+    })
   }
 
-  return results;
+  return results
 }
 
 /**
@@ -256,24 +295,29 @@ export async function getPatents({ from, until, offset = 0, limit = env.PAGE_SIZ
  * @param {object} options
  * @returns {Promise<Array>}
  */
-export async function getPatentHeaders({ from, until, offset = 0, limit = env.PAGE_SIZE }) {
-  const dateFilter = buildDateFilter(from, until, 'p.updated_at');
+export async function getPatentHeaders({
+  from,
+  until,
+  offset = 0,
+  limit = env.PAGE_SIZE,
+}) {
+  const dateFilter = buildDateFilter(from, until, 'p.updated_at')
 
   let query = `
     SELECT p.id, p.updated_at
     FROM Patente p
     WHERE p.estado = 1
-  `;
+  `
 
   if (dateFilter.clause) {
-    query += ` AND ${dateFilter.clause}`;
+    query += ` AND ${dateFilter.clause}`
   }
 
-  query += ' ORDER BY p.id LIMIT ? OFFSET ?';
+  query += ' ORDER BY p.id LIMIT ? OFFSET ?'
 
-  const [rows] = await pool.query(query, [...dateFilter.params, limit, offset]);
+  const [rows] = await pool.query(query, [...dateFilter.params, limit, offset])
 
-  return rows.map(row => buildPatentHeader(row));
+  return rows.map((row) => buildPatentHeader(row))
 }
 
 /**
@@ -290,19 +334,19 @@ export async function getPatentById(id) {
         AND p.estado = 1
     `,
     [id]
-  );
+  )
 
   if (rows.length === 0) {
-    return null;
+    return null
   }
 
-  const row = rows[0];
-  const context = await getPatentContext(row.id);
+  const row = rows[0]
+  const context = await getPatentContext(row.id)
 
   return {
     header: buildPatentHeader(row),
     metadata: {
       Patent: mapToCerif(row, context.inventors, context.holders),
     },
-  };
+  }
 }
