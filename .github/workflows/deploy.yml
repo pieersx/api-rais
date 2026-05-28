@@ -42,10 +42,11 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Deploy to EC2
+       - name: Deploy to EC2
         env:
           EC2_SSH_USER: ${{ secrets.EC2_SSH_USER }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
+          SSH_KEY_PATH: ~/.ssh/deploy_key
           DB_HOST: ${{ secrets.DB_HOST }}
           DB_PORT: ${{ secrets.DB_PORT }}
           DB_USER: ${{ secrets.DB_USER }}
@@ -54,11 +55,7 @@ jobs:
           BASE_URL: ${{ secrets.BASE_URL }}
           ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
           PAGE_SIZE: ${{ secrets.PAGE_SIZE }}
-        run: |
-          ssh -i ~/.ssh/deploy_key \
-            -o StrictHostKeyChecking=accept-new \
-            "${EC2_SSH_USER}@${EC2_HOST}" \
-            'bash -s' < scripts/deploy/deploy-ec2.sh
+        run: bash scripts/deploy/deploy-ec2.sh
 
       - name: Verify deployment
         run: |
