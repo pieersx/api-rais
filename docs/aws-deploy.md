@@ -101,3 +101,4 @@ Cada push a `main`:
 - `GET /health`
 - `GET /oai?verb=Identify`
 - `GET /oai?verb=ListMetadataFormats`
+# SSH from GitHub Actions enabled on 2026-05-28
