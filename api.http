@@ -317,4 +317,4 @@ GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=ListIdentifiers&m
 GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=ListRecords&metadataPrefix=perucris-cerif&set=publications
 
 ### 6. GETRECORD - Registro individual
-GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Persons/166
+GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:ec2-54-175-239-106.compute-1.amazonaws.com:Persons/166
