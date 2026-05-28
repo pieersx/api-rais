@@ -17,6 +17,9 @@ import {
 } from '../utils/constants.js';
 
 const ENTITY_TYPE = 'Fundings';
+const PROJECT_FUNDING_PREFIX = 'P';
+const CONVOCATORIA_FUNDING_PREFIX = 'C';
+const CONVOCATORIA_EXPORTABLE_EVENT = 'registro';
 const ROOT_ORGUNIT = {
   id: toCerifId('OrgUnits', '1'),
   acronym: 'UNMSM',
@@ -68,14 +71,36 @@ function parseFundingProjectId(id) {
   const value = String(id || '').trim();
   if (!value) return null;
 
-  const normalized = value.startsWith('P') ? value.slice(1) : value;
+  const normalized = value.startsWith(PROJECT_FUNDING_PREFIX) ? value.slice(1) : value;
   if (!/^\d+$/.test(normalized)) return null;
 
   return Number(normalized);
 }
 
+function parseFundingInternalId(id) {
+  const value = String(id || '').trim();
+  if (!value) return null;
+
+  if (value.startsWith(CONVOCATORIA_FUNDING_PREFIX)) {
+    const normalized = value.slice(1);
+    if (!/^\d+$/.test(normalized)) return null;
+    return {
+      kind: 'convocatoria',
+      id: Number(normalized),
+    };
+  }
+
+  const projectId = parseFundingProjectId(value);
+  if (!projectId) return null;
+
+  return {
+    kind: 'project',
+    id: projectId,
+  };
+}
+
 function buildFundingType(row) {
-  if (row.is_external_project || row.parent_funding_id) return FUNDING_TYPE_VALUES.GRANT;
+  if (row.is_external_project) return FUNDING_TYPE_VALUES.GRANT;
   return FUNDING_TYPE_VALUES.INTERNAL;
 }
 
@@ -190,19 +215,146 @@ function buildParentFunding(row) {
 
   const name = buildFundingDisplayName([
     convocatoria.descripcion,
-    convocatoria.evento,
     convocatoria.tipo,
     convocatoria.periodo,
   ]);
 
   return {
     Funding: {
-      id: toCerifId(ENTITY_TYPE, `C${convocatoria.id}`),
+      id: toCerifId(ENTITY_TYPE, `${CONVOCATORIA_FUNDING_PREFIX}${convocatoria.id}`),
       ...(name
         ? {
             Name: filterEmpty([createTextValueEntry(name, 'es')]),
           }
         : {}),
+    },
+  };
+}
+
+function formatDateOnly(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString().split('T')[0];
+  return String(value);
+}
+
+function getFundingLastModifiedValue(row) {
+  return row.updated_at || row.created_at || row.fecha_final || row.fecha_inicial || null;
+}
+
+function buildConvocatoriaName(row) {
+  const name = buildFundingDisplayName([
+    row.descripcion,
+    row.tipo,
+    row.periodo,
+  ]);
+
+  if (name) return name;
+  return `Convocatoria ${row.id}`;
+}
+
+function buildConvocatoriaType(row) {
+  if (row.parent_exportable_id) return FUNDING_TYPE_VALUES.CALL;
+  if (Number(row.exportable_child_count || 0) > 0) return FUNDING_TYPE_VALUES.PROGRAMME;
+  return FUNDING_TYPE_VALUES.CALL;
+}
+
+function buildConvocatoriaParentFunding(row) {
+  if (!row.parent_exportable_id) return null;
+
+  const parentName = buildFundingDisplayName([
+    row.parent_exportable_descripcion,
+    row.parent_exportable_tipo,
+    row.parent_exportable_periodo,
+  ]);
+
+  return {
+    Funding: {
+      id: toCerifId(ENTITY_TYPE, `${CONVOCATORIA_FUNDING_PREFIX}${row.parent_exportable_id}`),
+      ...(parentName
+        ? {
+            Name: filterEmpty([createTextValueEntry(parentName, 'es')]),
+          }
+        : {}),
+    },
+  };
+}
+
+function mapConvocatoriaToCerif(row) {
+  const fundingId = `${CONVOCATORIA_FUNDING_PREFIX}${row.id}`;
+  const fundingName = buildConvocatoriaName(row);
+  const parentFunding = buildConvocatoriaParentFunding(row);
+
+  const funding = {
+    '@id': toCerifId(ENTITY_TYPE, fundingId),
+    '@xmlns': NAMESPACES.PERUCRIS_CERIF,
+    Type: {
+      Scheme: VOCABULARIES.OPENAIRE_FUNDING_TYPES,
+      Value: buildConvocatoriaType(row),
+    },
+    Name: filterEmpty([createTextValueEntry(fundingName, 'es')]),
+    Identifier: filterEmpty([
+      createSchemeValueEntry(IDENTIFIER_SCHEMES.AWARD_NUMBER, row.id),
+    ]),
+    Funder: [{
+      OrgUnit: {
+        id: ROOT_ORGUNIT.id,
+        acronym: ROOT_ORGUNIT.acronym,
+        name: ROOT_ORGUNIT.name,
+      },
+    }],
+    OAMandate: {
+      Mandated: false,
+    },
+  };
+
+  const lastModified = toISO8601(getFundingLastModifiedValue(row));
+  if (lastModified) {
+    funding.LastModified = lastModified;
+  }
+
+  const startDate = formatDateOnly(row.fecha_inicial);
+  if (startDate) {
+    funding.StartDate = startDate;
+  }
+
+  const endDate = formatDateOnly(row.fecha_final);
+  if (endDate) {
+    funding.EndDate = endDate;
+  }
+
+  if (parentFunding) {
+    funding.PartOf = parentFunding;
+  }
+
+  if (row.descripcion) {
+    funding.Description = filterEmpty([createTextValueEntry(row.descripcion, 'es')]);
+  }
+
+  return funding;
+}
+
+function createProjectFundingRecord(row) {
+  return {
+    header: {
+      identifier: toOAIIdentifier(ENTITY_TYPE, `${PROJECT_FUNDING_PREFIX}${row.id}`),
+      datestamp: toISO8601(row.updated_at),
+      setSpec: 'fundings',
+    },
+    metadata: {
+      Funding: mapToCerif(row),
+    },
+  };
+}
+
+function createConvocatoriaFundingRecord(row) {
+  return {
+    header: {
+      identifier: toOAIIdentifier(ENTITY_TYPE, `${CONVOCATORIA_FUNDING_PREFIX}${row.id}`),
+      datestamp: toISO8601(getFundingLastModifiedValue(row)),
+      setSpec: 'fundings',
+    },
+    metadata: {
+      Funding: mapConvocatoriaToCerif(row),
     },
   };
 }
@@ -244,7 +396,7 @@ function buildDescription(row) {
 }
 
 function mapToCerif(row) {
-  const fundingId = `P${row.id}`;
+  const fundingId = `${PROJECT_FUNDING_PREFIX}${row.id}`;
   const lastModified = toISO8601(row.updated_at);
   const fundingName = buildFundingName(row);
   const awardNumber = String(row.codigo_proyecto || '').trim();
@@ -319,6 +471,162 @@ function mapToCerif(row) {
   }
 
   return funding;
+}
+
+function getBaseConvocatoriaFundingSelect() {
+  return `
+    SELECT
+      c.id,
+      c.tipo,
+      c.descripcion,
+      c.evento,
+      c.fecha_inicial,
+      c.fecha_final,
+      c.fecha_corte,
+      c.periodo,
+      c.convocatoria,
+      c.estado,
+      c.parent_id,
+      c.created_at,
+      c.updated_at,
+      cp.id AS parent_exportable_id,
+      cp.tipo AS parent_exportable_tipo,
+      cp.descripcion AS parent_exportable_descripcion,
+      cp.periodo AS parent_exportable_periodo,
+      child.exportable_child_count
+    FROM Convocatoria c
+    LEFT JOIN Convocatoria cp
+      ON cp.id = c.parent_id
+      AND cp.evento = '${CONVOCATORIA_EXPORTABLE_EVENT}'
+      AND cp.estado = 1
+    LEFT JOIN (
+      SELECT
+        parent_id,
+        COUNT(*) AS exportable_child_count
+      FROM Convocatoria
+      WHERE parent_id IS NOT NULL
+        AND evento = '${CONVOCATORIA_EXPORTABLE_EVENT}'
+        AND estado = 1
+      GROUP BY parent_id
+    ) child ON child.parent_id = c.id
+    WHERE c.evento = '${CONVOCATORIA_EXPORTABLE_EVENT}'
+      AND c.estado = 1
+  `;
+}
+
+async function countConvocatoriaFunding(from, until) {
+  const dateFilter = buildDateFilter(from, until, 'c.updated_at');
+  let query = `
+    SELECT COUNT(*) AS total
+    FROM Convocatoria c
+    WHERE c.evento = '${CONVOCATORIA_EXPORTABLE_EVENT}'
+      AND c.estado = 1
+  `;
+
+  if (dateFilter.clause) {
+    query += ` AND ${dateFilter.clause}`;
+  }
+
+  const [rows] = await pool.query(query, dateFilter.params);
+  return rows[0].total;
+}
+
+async function getProjectFundingIndex(from, until) {
+  const dateFilter = buildDateFilter(from, until, 'p.updated_at');
+  let query = `
+    SELECT p.id, p.updated_at
+    FROM Proyecto p
+    LEFT JOIN (
+      SELECT
+        pp.proyecto_id,
+        COUNT(DISTINCT UPPER(TRIM(pp.entidad_financiadora))) AS external_funder_count
+      FROM Publicacion_proyecto pp
+      WHERE IFNULL(pp.estado, 1) = 1
+        AND pp.proyecto_id IS NOT NULL
+        AND pp.entidad_financiadora IS NOT NULL
+        AND TRIM(pp.entidad_financiadora) <> ''
+        AND UPPER(TRIM(pp.entidad_financiadora)) <> 'UNMSM'
+      GROUP BY pp.proyecto_id
+    ) ef ON ef.proyecto_id = p.id
+    WHERE p.estado >= 1
+      AND ${STRICT_FUNDING_ELIGIBILITY}
+  `;
+
+  if (dateFilter.clause) {
+    query += ` AND ${dateFilter.clause}`;
+  }
+
+  query += ' ORDER BY p.id';
+
+  const [rows] = await pool.query(query, dateFilter.params);
+  return rows.map(row => ({
+    kind: 'project',
+    id: row.id,
+    sortOrder: 1,
+    datestamp: toISO8601(row.updated_at),
+  }));
+}
+
+async function getConvocatoriaFundingIndex(from, until) {
+  const dateFilter = buildDateFilter(from, until, 'c.updated_at');
+  let query = `
+    SELECT c.id, c.fecha_inicial, c.fecha_final, c.created_at, c.updated_at
+    FROM Convocatoria c
+    WHERE c.evento = '${CONVOCATORIA_EXPORTABLE_EVENT}'
+      AND c.estado = 1
+  `;
+
+  if (dateFilter.clause) {
+    query += ` AND ${dateFilter.clause}`;
+  }
+
+  query += ' ORDER BY c.id';
+
+  const [rows] = await pool.query(query, dateFilter.params);
+  return rows.map(row => ({
+    kind: 'convocatoria',
+    id: row.id,
+    sortOrder: 0,
+    datestamp: toISO8601(getFundingLastModifiedValue(row)),
+  }));
+}
+
+function compareFundingIndex(a, b) {
+  if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+  return a.id - b.id;
+}
+
+async function getFundingIndex(from, until) {
+  const [convocatorias, projects] = await Promise.all([
+    getConvocatoriaFundingIndex(from, until),
+    getProjectFundingIndex(from, until),
+  ]);
+
+  return [...convocatorias, ...projects].sort(compareFundingIndex);
+}
+
+async function getProjectFundingRecordsByIds(ids) {
+  if (ids.length === 0) return new Map();
+
+  const placeholders = ids.map(() => '?').join(', ');
+  const [rows] = await pool.query(
+    `${getBaseFundingSelect()} AND p.id IN (${placeholders})`,
+    ids
+  );
+
+  return new Map(rows.map(row => [row.id, createProjectFundingRecord(row)]));
+}
+
+async function getConvocatoriaFundingRecordsByIds(ids) {
+  if (ids.length === 0) return new Map();
+
+  const placeholders = ids.map(() => '?').join(', ');
+  const [rows] = await pool.query(
+    `${getBaseConvocatoriaFundingSelect()} AND c.id IN (${placeholders})`,
+    ids
+  );
+
+  return new Map(rows.map(row => [row.id, createConvocatoriaFundingRecord(row)]));
 }
 
 function getBaseFundingSelect() {
@@ -419,6 +727,15 @@ function getBaseFundingSelect() {
  * @returns {Promise<number>}
  */
 export async function countFunding(from, until) {
+  const [convocatoriaTotal, projectTotal] = await Promise.all([
+    countConvocatoriaFunding(from, until),
+    countProjectFunding(from, until),
+  ]);
+
+  return convocatoriaTotal + projectTotal;
+}
+
+async function countProjectFunding(from, until) {
   const dateFilter = buildDateFilter(from, until, 'p.updated_at');
 
   let query = `
@@ -454,26 +771,22 @@ export async function countFunding(from, until) {
  * @returns {Promise<Array>}
  */
 export async function getFunding({ from, until, offset = 0, limit = env.PAGE_SIZE }) {
-  const dateFilter = buildDateFilter(from, until, 'p.updated_at');
+  const indexRows = await getFundingIndex(from, until);
+  const page = indexRows.slice(offset, offset + limit);
 
-  let query = getBaseFundingSelect();
-  if (dateFilter.clause) {
-    query += ` AND ${dateFilter.clause}`;
-  }
-  query += ' ORDER BY p.id LIMIT ? OFFSET ?';
+  const projectIds = page.filter(row => row.kind === 'project').map(row => row.id);
+  const convocatoriaIds = page.filter(row => row.kind === 'convocatoria').map(row => row.id);
 
-  const [rows] = await pool.query(query, [...dateFilter.params, limit, offset]);
+  const [projectRecords, convocatoriaRecords] = await Promise.all([
+    getProjectFundingRecordsByIds(projectIds),
+    getConvocatoriaFundingRecordsByIds(convocatoriaIds),
+  ]);
 
-  return rows.map(row => ({
-    header: {
-      identifier: toOAIIdentifier(ENTITY_TYPE, `P${row.id}`),
-      datestamp: toISO8601(row.updated_at),
-      setSpec: 'fundings',
-    },
-    metadata: {
-      Funding: mapToCerif(row),
-    },
-  }));
+  return page.map(row => (
+    row.kind === 'project'
+      ? projectRecords.get(row.id)
+      : convocatoriaRecords.get(row.id)
+  )).filter(Boolean);
 }
 
 /**
@@ -482,26 +795,14 @@ export async function getFunding({ from, until, offset = 0, limit = env.PAGE_SIZ
  * @returns {Promise<Array>}
  */
 export async function getFundingHeaders({ from, until, offset = 0, limit = env.PAGE_SIZE }) {
-  const dateFilter = buildDateFilter(from, until, 'p.updated_at');
+  const page = (await getFundingIndex(from, until)).slice(offset, offset + limit);
 
-  let query = `
-    SELECT p.id, p.updated_at
-    FROM Proyecto p
-    WHERE p.estado >= 1
-      AND ${FUNDING_ELIGIBILITY}
-  `;
-
-  if (dateFilter.clause) {
-    query += ` AND ${dateFilter.clause}`;
-  }
-
-  query += ' ORDER BY p.id LIMIT ? OFFSET ?';
-
-  const [rows] = await pool.query(query, [...dateFilter.params, limit, offset]);
-
-  return rows.map(row => ({
-    identifier: toOAIIdentifier(ENTITY_TYPE, `P${row.id}`),
-    datestamp: toISO8601(row.updated_at),
+  return page.map(row => ({
+    identifier: toOAIIdentifier(
+      ENTITY_TYPE,
+      `${row.kind === 'project' ? PROJECT_FUNDING_PREFIX : CONVOCATORIA_FUNDING_PREFIX}${row.id}`
+    ),
+    datestamp: row.datestamp,
     setSpec: 'fundings',
   }));
 }
@@ -512,28 +813,27 @@ export async function getFundingHeaders({ from, until, offset = 0, limit = env.P
  * @returns {Promise<object|null>}
  */
 export async function getFundingById(id) {
-  const projectId = parseFundingProjectId(id);
-  if (!projectId) return null;
+  const parsedId = parseFundingInternalId(id);
+  if (!parsedId) return null;
+
+  if (parsedId.kind === 'convocatoria') {
+    const [rows] = await pool.query(
+      `${getBaseConvocatoriaFundingSelect()} AND c.id = ? LIMIT 1`,
+      [parsedId.id]
+    );
+
+    if (rows.length === 0) return null;
+    return createConvocatoriaFundingRecord(rows[0]);
+  }
 
   const [rows] = await pool.query(
     `${getBaseFundingSelect()} AND p.id = ? LIMIT 1`,
-    [projectId]
+    [parsedId.id]
   );
 
   if (rows.length === 0) {
     return null;
   }
 
-  const row = rows[0];
-
-  return {
-    header: {
-      identifier: toOAIIdentifier(ENTITY_TYPE, `P${row.id}`),
-      datestamp: toISO8601(row.updated_at),
-      setSpec: 'fundings',
-    },
-    metadata: {
-      Funding: mapToCerif(row),
-    },
-  };
+  return createProjectFundingRecord(rows[0]);
 }
