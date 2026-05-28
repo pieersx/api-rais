@@ -1,4 +1,4 @@
-name: Deploy API to AWS
+name: Deploy API to EC2
 
 on:
   push:
@@ -8,18 +8,12 @@ on:
       - 'src/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
-      - 'Dockerfile'
+      - 'scripts/deploy/deploy-ec2.sh'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 permissions:
-  id-token: write
   contents: read
-
-env:
-  AWS_REGION: ${{ vars.AWS_REGION }}
-  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
-  APPRUNNER_SERVICE_ARN: ${{ vars.APPRUNNER_SERVICE_ARN }}
 
 jobs:
   deploy:
@@ -29,44 +23,44 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate required settings
+      - name: Validate required secrets and variables
         run: |
-          test -n "$AWS_REGION" || (echo "Missing variable AWS_REGION" && exit 1)
-          test -n "$ECR_REPOSITORY" || (echo "Missing variable ECR_REPOSITORY" && exit 1)
-          test -n "$APPRUNNER_SERVICE_ARN" || (echo "Missing variable APPRUNNER_SERVICE_ARN" && exit 1)
-          test -n "${{ secrets.AWS_ROLE_TO_ASSUME }}" || (echo "Missing secret AWS_ROLE_TO_ASSUME" && exit 1)
+          test -n "${{ secrets.EC2_SSH_PRIVATE_KEY }}" || (echo "Missing secret EC2_SSH_PRIVATE_KEY" && exit 1)
+          test -n "${{ secrets.EC2_HOST }}" || (echo "Missing secret EC2_HOST" && exit 1)
+          test -n "${{ secrets.EC2_SSH_USER }}" || (echo "Missing secret EC2_SSH_USER" && exit 1)
+          test -n "${{ secrets.DB_PASSWORD }}" || (echo "Missing secret DB_PASSWORD" && exit 1)
+          test -n "${{ secrets.DB_HOST }}" || (echo "Missing secret DB_HOST" && exit 1)
+          test -n "${{ secrets.DB_USER }}" || (echo "Missing secret DB_USER" && exit 1)
+          test -n "${{ secrets.DB_NAME }}" || (echo "Missing secret DB_NAME" && exit 1)
+          test -n "${{ secrets.BASE_URL }}" || (echo "Missing secret BASE_URL" && exit 1)
+          test -n "${{ secrets.ADMIN_EMAIL }}" || (echo "Missing secret ADMIN_EMAIL" && exit 1)
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: ${{ env.AWS_REGION }}
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Login to Amazon ECR
-        id: ecr-login
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and push Docker image
+      - name: Deploy to EC2
         env:
-          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
+          EC2_SSH_USER: ${{ secrets.EC2_SSH_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          BASE_URL: ${{ secrets.BASE_URL }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          PAGE_SIZE: ${{ secrets.PAGE_SIZE }}
         run: |
-          docker build \
-            -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
-            -t "$ECR_REGISTRY/$ECR_REPOSITORY:latest" \
-            .
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=accept-new \
+            "${EC2_SSH_USER}@${EC2_HOST}" \
+            'bash -s' < scripts/deploy/deploy-ec2.sh
 
-          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
-
-      - name: Trigger App Runner deployment
+      - name: Verify deployment
         run: |
-          aws apprunner start-deployment \
-            --service-arn "$APPRUNNER_SERVICE_ARN"
-
-      - name: Print deploy target
-        run: |
-          aws apprunner describe-service \
-            --service-arn "$APPRUNNER_SERVICE_ARN" \
-            --query 'Service.ServiceUrl' \
-            --output text
+          sleep 5
+          curl -f "http://${{ secrets.EC2_HOST }}/health" && echo "Health check passed" || echo "Health check failed"
