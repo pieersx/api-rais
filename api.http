@@ -1,29 +1,26 @@
 ### =============================================================================
 ### RAIS-API - OAI-PMH 2.0 con CERIF JSON (PeruCRIS)
-### Pruebas de los 6 verbos OAI-PMH y 7 sets PeruCRIS
-### Registros seleccionados con datos mas completos segun directrices PeruCRIS
+### 6 Verbos OAI-PMH en AWS EC2 PRODUCTION
+### Base URL: http://ec2-54-175-239-106.compute-1.amazonaws.com/oai
 ### =============================================================================
 
 ### =============================================================================
-### 1. IDENTIFY - Informacion del repositorio
+### 1. IDENTIFY - Información del repositorio
 ### =============================================================================
 
-### Identify - Obtener informacion del repositorio
-GET http://localhost:3000/oai?verb=Identify
+GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=Identify
 
 ### =============================================================================
-### 2. LIST METADATA FORMATS - Formatos de metadatos soportados
+### 2. LISTMETADATAFORMATS - Formatos soportados
 ### =============================================================================
 
-### ListMetadataFormats - Sin identificador (todos los formatos)
-GET http://localhost:3000/oai?verb=ListMetadataFormats
+GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=ListMetadataFormats
 
 ### =============================================================================
-### 3. LIST SETS - Conjuntos disponibles
+### 3. LISTSETS - Conjuntos disponibles
 ### =============================================================================
 
-### ListSets - Obtener todos los sets disponibles
-GET http://localhost:3000/oai?verb=ListSets
+GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=ListSets
 
 ### =============================================================================
 ### 4. LIST IDENTIFIERS - Listado de identificadores por set
@@ -298,3 +295,26 @@ GET http://localhost:3000/health
 
 ### Info del API
 GET http://localhost:3000/
+
+### =============================================================================
+### PRODUCTION (AWS EC2) - 6 VERBOS OAI-PMH
+### Base: http://ec2-54-175-239-106.compute-1.amazonaws.com/oai
+### =============================================================================
+
+### 1. IDENTIFY - Información del repositorio
+GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=Identify
+
+### 2. LISTMETADATAFORMATS - Formatos soportados
+GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=ListMetadataFormats
+
+### 3. LISTSETS - Conjuntos disponibles
+GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=ListSets
+
+### 4. LISTIDENTIFIERS - Identificadores (ejemplo: persons)
+GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=persons
+
+### 5. LISTRECORDS - Registros completos (ejemplo: publications)
+GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=ListRecords&metadataPrefix=perucris-cerif&set=publications
+
+### 6. GETRECORD - Registro individual
+GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Persons/166
