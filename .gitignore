@@ -5,6 +5,7 @@ coverage/
 
 # Package manager caches
 .pnpm-store/
+package-lock.json
 
 .env
 .env.*

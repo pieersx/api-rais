@@ -225,6 +225,52 @@ GET http://localhost:3000/oai?verb=ListRecords&metadataPrefix=perucris-cerif&set
 GET http://localhost:3000/oai?verb=ListRecords&metadataPrefix=perucris-cerif&set=equipment
 
 ### =============================================================================
+### VERIFICACION DE OBSERVACIONES SOLVENTADAS (PERSONS/OAI)
+### =============================================================================
+
+### [Obs 1] Identifier solo DNI + Scopus/Researcher en campos propios
+### Esperado en Persons/26:
+### - Person.Identifier contiene solo DNI
+### - Person.ScopusAuthorID existe (si aplica)
+### - Person.ResearcherID existe solo cuando el dato real esta presente
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Persons/26
+
+### [Obs 1] Ejemplo con ResearcherID en campo propio
+### Esperado en Persons/166:
+### - DNI en Identifier
+### - ScopusAuthorID en campo propio
+### - ResearcherID en campo propio
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Persons/166
+
+### [Obs 2] Affiliation sin OrgUnits/I colgantes para institutos inactivos
+### Esperado en Persons/132:
+### - No aparece OrgUnits/I111 en Affiliation
+### - Se mantienen afiliaciones resolubles (UNMSM y/o facultad)
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:Persons/132
+
+### [Obs 2] Confirmar que OrgUnits/I111 no es resoluble en universo exportado
+### Esperado: error idDoesNotExist
+GET http://localhost:3000/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:rais.unmsm.edu.pe:OrgUnits/I111
+
+### [Obs 3] Validacion runtime de Persons: ListIdentifiers + paginacion
+### Paso 1: obtener primera pagina y resumptionToken
+GET http://localhost:3000/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=persons
+
+### Paso 2: reemplazar TOKEN_PERSONS con el valor de #text de resumptionToken
+# GET http://localhost:3000/oai?verb=ListIdentifiers&resumptionToken=TOKEN_PERSONS
+
+### [Obs 3] Validacion runtime de Persons: ListRecords
+GET http://localhost:3000/oai?verb=ListRecords&metadataPrefix=perucris-cerif&set=persons
+
+### [Obs 5] ListMetadataFormats solo anuncia formatos realmente soportados
+### Esperado: solo metadataPrefix=perucris-cerif
+GET http://localhost:3000/oai?verb=ListMetadataFormats
+
+### [Obs 4 - pendiente por decision funcional] metadataPrefix canonico no activado
+### Esperado actualmente: cannotDisseminateFormat (se mantiene comportamiento vigente)
+GET http://localhost:3000/oai?verb=ListIdentifiers&metadataPrefix=cerif_perucris&set=persons
+
+### =============================================================================
 ### MANEJO DE ERRORES OAI-PMH
 ### =============================================================================
 

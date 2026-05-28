@@ -165,13 +165,15 @@ function mapToCerif(row, affiliation = null) {
     documentType === 'DNI' && /^\d{8}$/.test(String(row.doc_numero || '').trim())
       ? createSchemeValueEntry(IDENTIFIER_SCHEMES.DNI, row.doc_numero)
       : null,
-    row.scopus_id && row.scopus_id !== '0'
-      ? createSchemeValueEntry(IDENTIFIER_SCHEMES.SCOPUS_AUTHOR_ID, row.scopus_id)
-      : null,
-    row.researcher_id && row.researcher_id !== '0'
-      ? createSchemeValueEntry(IDENTIFIER_SCHEMES.RESEARCHER_ID, row.researcher_id)
-      : null,
   ]);
+
+  const scopusAuthorId = row.scopus_id && row.scopus_id !== '0'
+    ? createSchemeValueEntry(IDENTIFIER_SCHEMES.SCOPUS_AUTHOR_ID, row.scopus_id)
+    : null;
+
+  const researcherId = row.researcher_id && row.researcher_id !== '0'
+    ? createSchemeValueEntry(IDENTIFIER_SCHEMES.RESEARCHER_ID, row.researcher_id)
+    : null;
 
   const emails = [...new Set(filterEmpty([row.email1, row.email2, row.email3].map(normalizeEmail)).map(email => `mailto:${email}`))];
 
@@ -227,6 +229,14 @@ function mapToCerif(row, affiliation = null) {
 
   if (identifiers.length > 0) {
     person.Identifier = identifiers;
+  }
+
+  if (scopusAuthorId) {
+    person.ScopusAuthorID = scopusAuthorId;
+  }
+
+  if (researcherId) {
+    person.ResearcherID = researcherId;
   }
 
   if (orcid) {
@@ -292,7 +302,7 @@ export async function getPersons({ from, until, offset = 0, limit = env.PAGE_SIZ
       i.instituto as instituto_nombre
     FROM Usuario_investigador ui
     LEFT JOIN Facultad f ON ui.facultad_id = f.id
-    LEFT JOIN Instituto i ON ui.instituto_id = i.id
+    LEFT JOIN Instituto i ON ui.instituto_id = i.id AND i.estado = 1
     WHERE ui.estado = 1
       AND ui.sexo IN ('M', 'F')
   `;
@@ -356,7 +366,7 @@ export async function getPersonById(id) {
       i.instituto as instituto_nombre
     FROM Usuario_investigador ui
     LEFT JOIN Facultad f ON ui.facultad_id = f.id
-    LEFT JOIN Instituto i ON ui.instituto_id = i.id
+    LEFT JOIN Instituto i ON ui.instituto_id = i.id AND i.estado = 1
     WHERE ui.id = ?
       AND ui.estado = 1
       AND ui.sexo IN ('M', 'F')
