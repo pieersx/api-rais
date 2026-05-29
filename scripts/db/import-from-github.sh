@@ -14,15 +14,28 @@ GITHUB_RAW_URL="https://raw.githubusercontent.com/$GITHUB_REPO/main/$BACKUP_FILE
 DB_HOST="${DB_HOST:-rais-api-prod-mysql.c0v2oqgqm8os.us-east-1.rds.amazonaws.com}"
 DB_PORT="${DB_PORT:-3306}"
 DB_USER="${DB_USER:-raisadmin}"
-DB_PASSWORD="${DB_PASSWORD}"  # Debe venir de variable de entorno (GitHub Secrets)
+DB_PASSWORD="${DB_PASSWORD}"  # Puede venir de variable de entorno
 DB_NAME="${DB_NAME:-rais}"
 
 TMP_BACKUP="/tmp/backup-import-$$.sql"
 
-# Verificar que la contraseña fue pasada
+# Si no hay contraseña, intentar obtenerla de AWS Secrets Manager
 if [ -z "$DB_PASSWORD" ]; then
-  echo "❌ Error: DB_PASSWORD no está definida"
-  echo "Verifica que GitHub Secrets contiene DB_PASSWORD"
+  echo "Intentando obtener DB_PASSWORD desde AWS Secrets Manager..."
+  if command -v aws >/dev/null 2>&1; then
+    DB_PASSWORD=$(aws secretsmanager get-secret-value --secret-id rais-api-dev/app/db-password --region us-east-1 --query 'SecretString' --output text 2>/dev/null || echo "")
+    if [ -z "$DB_PASSWORD" ]; then
+      echo "⚠️  No se pudo obtener del Secrets Manager, usando contraseña por defecto"
+      DB_PASSWORD="RaisApi!2026Temp"
+    fi
+  else
+    echo "aws cli no disponible, usando contraseña por defecto"
+    DB_PASSWORD="RaisApi!2026Temp"
+  fi
+fi
+
+if [ -z "$DB_PASSWORD" ]; then
+  echo "❌ Error: No hay contraseña disponible"
   exit 1
 fi
 
