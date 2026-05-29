@@ -39,14 +39,25 @@ if [ -z "$DB_PASSWORD" ]; then
   exit 1
 fi
 
-echo "1️⃣ Descargando backup desde GitHub..."
-echo "URL: $GITHUB_RAW_URL"
+echo "1️⃣ Descargando backup..."
+echo ""
+
+# Usar S3 si está disponible (para archivos grandes en Git LFS), sino GitHub
+if [ -n "$S3_BACKUP_URL" ]; then
+  echo "📦 Fuente: S3 (URL pre-firmada)"
+  BACKUP_URL="$S3_BACKUP_URL"
+else
+  echo "📦 Fuente: GitHub"
+  BACKUP_URL="$GITHUB_RAW_URL"
+fi
+
+echo "URL: $BACKUP_URL"
 echo ""
 
 if command -v wget >/dev/null 2>&1; then
-  wget -O "$TMP_BACKUP" "$GITHUB_RAW_URL" -q --show-progress 2>&1 | tail -5
+  wget -O "$TMP_BACKUP" "$BACKUP_URL" -q --show-progress 2>&1 | tail -5
 elif command -v curl >/dev/null 2>&1; then
-  curl -L -o "$TMP_BACKUP" "$GITHUB_RAW_URL" -# 2>&1 | tail -3
+  curl -L -o "$TMP_BACKUP" "$BACKUP_URL" -# 2>&1 | tail -3
 else
   echo "❌ wget o curl no disponibles"
   exit 1
