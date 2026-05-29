@@ -19,138 +19,60 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-
       - name: Validate required secrets
         run: |
           test -n "${{ secrets.DB_HOST }}" || (echo "Missing secret: DB_HOST" && exit 1)
           test -n "${{ secrets.DB_USER }}" || (echo "Missing secret: DB_USER" && exit 1)
           test -n "${{ secrets.DB_PASSWORD }}" || (echo "Missing secret: DB_PASSWORD" && exit 1)
           test -n "${{ secrets.DB_NAME }}" || (echo "Missing secret: DB_NAME" && exit 1)
+          test -n "${{ secrets.EC2_SSH_PRIVATE_KEY }}" || (echo "Missing secret: EC2_SSH_PRIVATE_KEY" && exit 1)
+          test -n "${{ secrets.EC2_HOST }}" || (echo "Missing secret: EC2_HOST" && exit 1)
+          test -n "${{ secrets.EC2_SSH_USER }}" || (echo "Missing secret: EC2_SSH_USER" && exit 1)
 
-      - name: Install dependencies
-        run: npm install mysql2
-
-      - name: Download backup from S3 (if needed)
-        env:
-          BACKUP_FILE: database/dumps/${{ github.event.inputs.backup_file }}
+      - name: Setup SSH
         run: |
-          # Si el archivo no existe localmente, intentar descargarlo de S3
-          if [ ! -f "$BACKUP_FILE" ]; then
-            echo "Archivo no encontrado localmente, usando archivo local del repo"
-            ls -la database/dumps/raw/ || echo "Directorio dumps no encontrado"
-            # Intentar encontrar el archivo backup más reciente
-            FOUND_FILE=$(find database/dumps -name "backup-*.sql" -type f 2>/dev/null | head -1)
-            if [ -z "$FOUND_FILE" ]; then
-              echo "❌ No se encontró ningún archivo de backup"
-              exit 1
-            fi
-            echo "Usando: $FOUND_FILE"
-            export BACKUP_FILE="$FOUND_FILE"
-          fi
-          echo "BACKUP_FILE=$BACKUP_FILE" >> $GITHUB_ENV
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Import backup to production database
+      - name: Download and execute import script in EC2
         env:
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_PORT: ${{ secrets.DB_PORT || '3306' }}
-          DB_USER: ${{ secrets.DB_USER }}
+          EC2_SSH_USER: ${{ secrets.EC2_SSH_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: ${{ secrets.DB_NAME }}
         run: |
-          BACKUP_FILE=${{ env.BACKUP_FILE }}
-          
-          echo "=== IMPORTACIÓN A RDS PRODUCCIÓN ==="
-          echo "Host: $DB_HOST:$DB_PORT"
-          echo "Usuario: $DB_USER"
-          echo "BD: $DB_NAME"
-          echo "Archivo: $BACKUP_FILE"
+          echo "=== INICIANDO IMPORTACIÓN DE BACKUP EN EC2 ==="
           echo ""
           
-          # Verificar que el archivo existe
-          if [ ! -f "$BACKUP_FILE" ]; then
-            echo "❌ Error: archivo no encontrado en $BACKUP_FILE"
-            ls -la database/dumps/ || true
+          # Descargar e instalar el script de importación en EC2
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              "$EC2_SSH_USER@$EC2_HOST" \
+              "bash -s" << 'EOFCMD'
+          
+          echo "📥 Descargando script de importación..."
+          curl -fsSL https://raw.githubusercontent.com/pieersx/api-rais/main/scripts/db/import-from-github.sh -o /tmp/import.sh
+          chmod +x /tmp/import.sh
+          
+          echo "🚀 Ejecutando importación..."
+          bash /tmp/import.sh
+          
+          EXIT_CODE=$?
+          rm -f /tmp/import.sh
+          exit $EXIT_CODE
+          
+          EOFCMD
+          
+          if [ $? -eq 0 ]; then
+            echo ""
+            echo "✅ IMPORTACIÓN COMPLETADA EXITOSAMENTE"
+          else
+            echo ""
+            echo "❌ Falló la importación en EC2"
             exit 1
           fi
-          
-          FILE_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
-          echo "📦 Tamaño: $FILE_SIZE"
-          echo ""
-          echo "⏳ Iniciando importación (puede tardar 10-30 minutos)..."
-          echo ""
-          
-          # Crear script Node.js para importación
-          cat > import.js << 'SCRIPTEOF'
-          const mysql = require('mysql2/promise');
-          const fs = require('fs');
-          const path = require('path');
-          
-          const config = {
-            host: process.env.DB_HOST,
-            port: parseInt(process.env.DB_PORT || '3306'),
-            user: process.env.DB_USER,
-            password: process.env.DB_PASSWORD,
-            database: process.env.DB_NAME,
-            multipleStatements: true,
-            waitForConnections: true,
-            connectionLimit: 1,
-          };
-          
-          const backupFile = process.env.BACKUP_FILE;
-          
-          (async () => {
-            try {
-              console.log('🔗 Conectando al RDS...');
-              const connection = await mysql.createConnection(config);
-              console.log('✅ Conectado exitosamente\n');
-              
-              console.log('📖 Leyendo archivo de backup...');
-              const sql = fs.readFileSync(backupFile, 'utf8');
-              console.log('✅ Archivo leído\n');
-              
-              console.log('⏳ Ejecutando importación...');
-              const startTime = Date.now();
-              
-              await connection.query(sql);
-              
-              const duration = Date.now() - startTime;
-              const minutes = Math.floor(duration / 60000);
-              const seconds = Math.floor((duration % 60000) / 1000);
-              
-              console.log(`\n✅ IMPORTACIÓN COMPLETADA`);
-              console.log(`⏱️  Tiempo: ${minutes}m ${seconds}s\n`);
-              
-              // Verificar integridad
-              console.log('📊 Verificando integridad de datos...');
-              const [tables] = await connection.query('SHOW TABLES;');
-              console.log(`✅ Tablas en BD: ${tables.length}\n`);
-              
-              const [[pubRow]] = await connection.query('SELECT COUNT(*) as count FROM Publicacion;');
-              console.log(`📄 Publicaciones: ${pubRow.count.toLocaleString()}`);
-              
-              const [[projRow]] = await connection.query('SELECT COUNT(*) as count FROM Proyecto;');
-              console.log(`🔬 Proyectos: ${projRow.count.toLocaleString()}`);
-              
-              const [[persRow]] = await connection.query('SELECT COUNT(*) as count FROM Usuario_investigador;');
-              console.log(`👥 Personas: ${persRow.count.toLocaleString()}\n`);
-              
-              console.log('✅ ¡BASE DE DATOS ACTUALIZADA EXITOSAMENTE!\n');
-              
-              await connection.end();
-              process.exit(0);
-            } catch (error) {
-              console.error('\n❌ Error durante importación:');
-              console.error(error.message);
-              process.exit(1);
-            }
-          })();
-          SCRIPTEOF
-          
-          node import.js
 
       - name: Deployment status
         if: success()
