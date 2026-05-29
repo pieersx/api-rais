@@ -18,8 +18,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -36,6 +34,25 @@ jobs:
       - name: Install dependencies
         run: npm install mysql2
 
+      - name: Download backup from S3 (if needed)
+        env:
+          BACKUP_FILE: database/dumps/${{ github.event.inputs.backup_file }}
+        run: |
+          # Si el archivo no existe localmente, intentar descargarlo de S3
+          if [ ! -f "$BACKUP_FILE" ]; then
+            echo "Archivo no encontrado localmente, usando archivo local del repo"
+            ls -la database/dumps/raw/ || echo "Directorio dumps no encontrado"
+            # Intentar encontrar el archivo backup más reciente
+            FOUND_FILE=$(find database/dumps -name "backup-*.sql" -type f 2>/dev/null | head -1)
+            if [ -z "$FOUND_FILE" ]; then
+              echo "❌ No se encontró ningún archivo de backup"
+              exit 1
+            fi
+            echo "Usando: $FOUND_FILE"
+            export BACKUP_FILE="$FOUND_FILE"
+          fi
+          echo "BACKUP_FILE=$BACKUP_FILE" >> $GITHUB_ENV
+
       - name: Import backup to production database
         env:
           DB_HOST: ${{ secrets.DB_HOST }}
@@ -43,8 +60,9 @@ jobs:
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_NAME: ${{ secrets.DB_NAME }}
-          BACKUP_FILE: database/dumps/${{ github.event.inputs.backup_file }}
         run: |
+          BACKUP_FILE=${{ env.BACKUP_FILE }}
+          
           echo "=== IMPORTACIÓN A RDS PRODUCCIÓN ==="
           echo "Host: $DB_HOST:$DB_PORT"
           echo "Usuario: $DB_USER"
@@ -55,13 +73,14 @@ jobs:
           # Verificar que el archivo existe
           if [ ! -f "$BACKUP_FILE" ]; then
             echo "❌ Error: archivo no encontrado en $BACKUP_FILE"
+            ls -la database/dumps/ || true
             exit 1
           fi
           
           FILE_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
           echo "📦 Tamaño: $FILE_SIZE"
           echo ""
-          echo "⏳ Iniciando importación (puede tardar 10-20 minutos)..."
+          echo "⏳ Iniciando importación (puede tardar 10-30 minutos)..."
           echo ""
           
           # Crear script Node.js para importación
