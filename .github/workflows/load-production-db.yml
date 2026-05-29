@@ -1,0 +1,147 @@
+name: Load Production Database
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_file:
+        description: 'Backup file path in database/dumps/'
+        required: false
+        default: 'raw/backup-rais-29-05-26.sql'
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Validate required secrets
+        run: |
+          test -n "${{ secrets.DB_HOST }}" || (echo "Missing secret: DB_HOST" && exit 1)
+          test -n "${{ secrets.DB_USER }}" || (echo "Missing secret: DB_USER" && exit 1)
+          test -n "${{ secrets.DB_PASSWORD }}" || (echo "Missing secret: DB_PASSWORD" && exit 1)
+          test -n "${{ secrets.DB_NAME }}" || (echo "Missing secret: DB_NAME" && exit 1)
+
+      - name: Install dependencies
+        run: npm install mysql2
+
+      - name: Import backup to production database
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT || '3306' }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          BACKUP_FILE: database/dumps/${{ github.event.inputs.backup_file }}
+        run: |
+          echo "=== IMPORTACIÓN A RDS PRODUCCIÓN ==="
+          echo "Host: $DB_HOST:$DB_PORT"
+          echo "Usuario: $DB_USER"
+          echo "BD: $DB_NAME"
+          echo "Archivo: $BACKUP_FILE"
+          echo ""
+          
+          # Verificar que el archivo existe
+          if [ ! -f "$BACKUP_FILE" ]; then
+            echo "❌ Error: archivo no encontrado en $BACKUP_FILE"
+            exit 1
+          fi
+          
+          FILE_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
+          echo "📦 Tamaño: $FILE_SIZE"
+          echo ""
+          echo "⏳ Iniciando importación (puede tardar 10-20 minutos)..."
+          echo ""
+          
+          # Crear script Node.js para importación
+          cat > import.js << 'SCRIPTEOF'
+          const mysql = require('mysql2/promise');
+          const fs = require('fs');
+          const path = require('path');
+          
+          const config = {
+            host: process.env.DB_HOST,
+            port: parseInt(process.env.DB_PORT || '3306'),
+            user: process.env.DB_USER,
+            password: process.env.DB_PASSWORD,
+            database: process.env.DB_NAME,
+            multipleStatements: true,
+            waitForConnections: true,
+            connectionLimit: 1,
+          };
+          
+          const backupFile = process.env.BACKUP_FILE;
+          
+          (async () => {
+            try {
+              console.log('🔗 Conectando al RDS...');
+              const connection = await mysql.createConnection(config);
+              console.log('✅ Conectado exitosamente\n');
+              
+              console.log('📖 Leyendo archivo de backup...');
+              const sql = fs.readFileSync(backupFile, 'utf8');
+              console.log('✅ Archivo leído\n');
+              
+              console.log('⏳ Ejecutando importación...');
+              const startTime = Date.now();
+              
+              await connection.query(sql);
+              
+              const duration = Date.now() - startTime;
+              const minutes = Math.floor(duration / 60000);
+              const seconds = Math.floor((duration % 60000) / 1000);
+              
+              console.log(`\n✅ IMPORTACIÓN COMPLETADA`);
+              console.log(`⏱️  Tiempo: ${minutes}m ${seconds}s\n`);
+              
+              // Verificar integridad
+              console.log('📊 Verificando integridad de datos...');
+              const [tables] = await connection.query('SHOW TABLES;');
+              console.log(`✅ Tablas en BD: ${tables.length}\n`);
+              
+              const [[pubRow]] = await connection.query('SELECT COUNT(*) as count FROM Publicacion;');
+              console.log(`📄 Publicaciones: ${pubRow.count.toLocaleString()}`);
+              
+              const [[projRow]] = await connection.query('SELECT COUNT(*) as count FROM Proyecto;');
+              console.log(`🔬 Proyectos: ${projRow.count.toLocaleString()}`);
+              
+              const [[persRow]] = await connection.query('SELECT COUNT(*) as count FROM Usuario_investigador;');
+              console.log(`👥 Personas: ${persRow.count.toLocaleString()}\n`);
+              
+              console.log('✅ ¡BASE DE DATOS ACTUALIZADA EXITOSAMENTE!\n');
+              
+              await connection.end();
+              process.exit(0);
+            } catch (error) {
+              console.error('\n❌ Error durante importación:');
+              console.error(error.message);
+              process.exit(1);
+            }
+          })();
+          SCRIPTEOF
+          
+          node import.js
+
+      - name: Deployment status
+        if: success()
+        run: |
+          echo "✅ Base de datos de producción actualizada exitosamente"
+          echo "📌 Próximo paso: Hacer push a main para redesplegarse la API"
+
+      - name: Failure notification
+        if: failure()
+        run: |
+          echo "❌ Fallo durante la importación"
+          echo "📌 Revisar logs arriba para detalles"
+          exit 1
