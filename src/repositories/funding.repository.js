@@ -19,7 +19,6 @@ import {
 const ENTITY_TYPE = 'Fundings';
 const PROJECT_FUNDING_PREFIX = 'P';
 const CONVOCATORIA_FUNDING_PREFIX = 'C';
-const CONVOCATORIA_EXPORTABLE_EVENT = 'registro';
 const ROOT_ORGUNIT = {
   id: toCerifId('OrgUnits', '1'),
   acronym: 'UNMSM',
@@ -497,20 +496,20 @@ function getBaseConvocatoriaFundingSelect() {
     FROM Convocatoria c
     LEFT JOIN Convocatoria cp
       ON cp.id = c.parent_id
-      AND cp.evento = '${CONVOCATORIA_EXPORTABLE_EVENT}'
       AND cp.estado = 1
+      AND LOWER(TRIM(COALESCE(cp.evento, ''))) NOT IN ('calendario', 'evaluacion')
     LEFT JOIN (
       SELECT
         parent_id,
         COUNT(*) AS exportable_child_count
       FROM Convocatoria
       WHERE parent_id IS NOT NULL
-        AND evento = '${CONVOCATORIA_EXPORTABLE_EVENT}'
         AND estado = 1
+        AND LOWER(TRIM(COALESCE(evento, ''))) NOT IN ('calendario', 'evaluacion')
       GROUP BY parent_id
     ) child ON child.parent_id = c.id
-    WHERE c.evento = '${CONVOCATORIA_EXPORTABLE_EVENT}'
-      AND c.estado = 1
+    WHERE c.estado = 1
+      AND LOWER(TRIM(COALESCE(c.evento, ''))) NOT IN ('calendario', 'evaluacion')
   `;
 }
 
@@ -519,8 +518,8 @@ async function countConvocatoriaFunding(from, until) {
   let query = `
     SELECT COUNT(*) AS total
     FROM Convocatoria c
-    WHERE c.evento = '${CONVOCATORIA_EXPORTABLE_EVENT}'
-      AND c.estado = 1
+    WHERE c.estado = 1
+      AND LOWER(TRIM(COALESCE(c.evento, ''))) NOT IN ('calendario', 'evaluacion')
   `;
 
   if (dateFilter.clause) {
@@ -536,6 +535,9 @@ async function getProjectFundingIndex(from, until) {
   let query = `
     SELECT p.id, p.updated_at
     FROM Proyecto p
+    LEFT JOIN Convocatoria c ON c.id = p.convocatoria
+    LEFT JOIN Convocatoria cp ON cp.id = c.parent_id
+    LEFT JOIN Convocatoria cgp ON cgp.id = cp.parent_id
     LEFT JOIN (
       SELECT
         pp.proyecto_id,
@@ -550,6 +552,13 @@ async function getProjectFundingIndex(from, until) {
     ) ef ON ef.proyecto_id = p.id
     WHERE p.estado >= 1
       AND ${STRICT_FUNDING_ELIGIBILITY}
+      AND p.codigo_proyecto IS NOT NULL
+      AND p.codigo_proyecto <> ''
+      AND (
+        (c.id IS NOT NULL AND LOWER(TRIM(COALESCE(c.evento, ''))) NOT IN ('calendario', 'evaluacion'))
+        OR (cp.id IS NOT NULL AND LOWER(TRIM(COALESCE(cp.evento, ''))) NOT IN ('calendario', 'evaluacion'))
+        OR (cgp.id IS NOT NULL AND LOWER(TRIM(COALESCE(cgp.evento, ''))) NOT IN ('calendario', 'evaluacion'))
+      )
   `;
 
   if (dateFilter.clause) {
@@ -572,8 +581,8 @@ async function getConvocatoriaFundingIndex(from, until) {
   let query = `
     SELECT c.id, c.fecha_inicial, c.fecha_final, c.created_at, c.updated_at
     FROM Convocatoria c
-    WHERE c.evento = '${CONVOCATORIA_EXPORTABLE_EVENT}'
-      AND c.estado = 1
+    WHERE c.estado = 1
+      AND LOWER(TRIM(COALESCE(c.evento, ''))) NOT IN ('calendario', 'evaluacion')
   `;
 
   if (dateFilter.clause) {
@@ -717,6 +726,13 @@ function getBaseFundingSelect() {
     ) sv ON sv.proyecto_id = p.id
     WHERE p.estado >= 1
       AND ${STRICT_FUNDING_ELIGIBILITY}
+      AND p.codigo_proyecto IS NOT NULL
+      AND p.codigo_proyecto <> ''
+      AND (
+        (c.id IS NOT NULL AND LOWER(TRIM(COALESCE(c.evento, ''))) NOT IN ('calendario', 'evaluacion'))
+        OR (cp.id IS NOT NULL AND LOWER(TRIM(COALESCE(cp.evento, ''))) NOT IN ('calendario', 'evaluacion'))
+        OR (cgp.id IS NOT NULL AND LOWER(TRIM(COALESCE(cgp.evento, ''))) NOT IN ('calendario', 'evaluacion'))
+      )
   `;
 }
 
@@ -741,6 +757,9 @@ async function countProjectFunding(from, until) {
   let query = `
     SELECT COUNT(*) as total
     FROM Proyecto p
+    LEFT JOIN Convocatoria c ON c.id = p.convocatoria
+    LEFT JOIN Convocatoria cp ON cp.id = c.parent_id
+    LEFT JOIN Convocatoria cgp ON cgp.id = cp.parent_id
     LEFT JOIN (
       SELECT
         pp.proyecto_id,
@@ -755,6 +774,13 @@ async function countProjectFunding(from, until) {
     ) ef ON ef.proyecto_id = p.id
     WHERE p.estado >= 1
       AND ${STRICT_FUNDING_ELIGIBILITY}
+      AND p.codigo_proyecto IS NOT NULL
+      AND p.codigo_proyecto <> ''
+      AND (
+        (c.id IS NOT NULL AND LOWER(TRIM(COALESCE(c.evento, ''))) NOT IN ('calendario', 'evaluacion'))
+        OR (cp.id IS NOT NULL AND LOWER(TRIM(COALESCE(cp.evento, ''))) NOT IN ('calendario', 'evaluacion'))
+        OR (cgp.id IS NOT NULL AND LOWER(TRIM(COALESCE(cgp.evento, ''))) NOT IN ('calendario', 'evaluacion'))
+      )
   `;
 
   if (dateFilter.clause) {
