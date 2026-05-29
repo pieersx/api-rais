@@ -11,13 +11,20 @@ GITHUB_REPO="pieersx/api-rais"
 BACKUP_FILE_PATH="database/dumps/raw/backup-rais-29-05-26.sql"
 GITHUB_RAW_URL="https://raw.githubusercontent.com/$GITHUB_REPO/main/$BACKUP_FILE_PATH"
 
-DB_HOST="rais-api-prod-mysql.c0v2oqgqm8os.us-east-1.rds.amazonaws.com"
-DB_PORT="3306"
-DB_USER="raisadmin"
-DB_PASSWORD="${DB_PASSWORD:-RaisApi!2026Temp}"
-DB_NAME="rais"
+DB_HOST="${DB_HOST:-rais-api-prod-mysql.c0v2oqgqm8os.us-east-1.rds.amazonaws.com}"
+DB_PORT="${DB_PORT:-3306}"
+DB_USER="${DB_USER:-raisadmin}"
+DB_PASSWORD="${DB_PASSWORD}"  # Debe venir de variable de entorno (GitHub Secrets)
+DB_NAME="${DB_NAME:-rais}"
 
 TMP_BACKUP="/tmp/backup-import-$$.sql"
+
+# Verificar que la contraseña fue pasada
+if [ -z "$DB_PASSWORD" ]; then
+  echo "❌ Error: DB_PASSWORD no está definida"
+  echo "Verifica que GitHub Secrets contiene DB_PASSWORD"
+  exit 1
+fi
 
 echo "1️⃣ Descargando backup desde GitHub..."
 echo "URL: $GITHUB_RAW_URL"
@@ -33,17 +40,27 @@ else
 fi
 
 FILE_SIZE=$(du -h "$TMP_BACKUP" | cut -f1)
-echo "✅ Descargado ($FILE_SIZE)"
+FILE_LINES=$(wc -l < "$TMP_BACKUP")
+
+if [ "$FILE_LINES" -lt 100 ]; then
+  echo "⚠️  Archivo descargado parece vacío o incompleto ($FILE_LINES líneas)"
+  echo "Contenido:"
+  cat "$TMP_BACKUP" | head -20
+  rm -f "$TMP_BACKUP"
+  exit 1
+fi
+
+echo "✅ Descargado ($FILE_SIZE, $FILE_LINES líneas)"
 echo ""
 
 echo "2️⃣ Instalando mysql-client..."
-sudo apt-get update -qq
+sudo apt-get update -qq 2>&1 | tail -1
 sudo apt-get install -y mysql-client-core-8.0 2>&1 | grep -E "Setting up|Processing" || echo "  (ya instalado)"
 echo ""
 
 echo "3️⃣ Probando conexión a RDS..."
 export MYSQL_PWD="$DB_PASSWORD"
-timeout 10 mysql -h "$DB_HOST" -u "$DB_USER" -e "SELECT VERSION() as version;" || echo "⚠️  Conexión lenta"
+timeout 10 mysql -h "$DB_HOST" -u "$DB_USER" -e "SELECT VERSION() as version;" 2>&1 || echo "⚠️  Error de conexión - verificando credenciales..."
 echo "✅ Conectado a RDS"
 echo ""
 
@@ -70,4 +87,5 @@ echo ""
 
 rm -f "$TMP_BACKUP"
 echo "✅ ¡BASE DE DATOS ACTUALIZADA EXITOSAMENTE!"
+
 

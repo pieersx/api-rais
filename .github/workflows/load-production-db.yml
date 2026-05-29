@@ -40,7 +40,11 @@ jobs:
         env:
           EC2_SSH_USER: ${{ secrets.EC2_SSH_USER }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
         run: |
           echo "=== INICIANDO IMPORTACIÓN DE BACKUP EN EC2 ==="
           echo ""
@@ -57,6 +61,11 @@ jobs:
           chmod +x /tmp/import.sh
           
           echo "🚀 Ejecutando importación..."
+          export DB_HOST="$DB_HOST"
+          export DB_PORT="$DB_PORT"
+          export DB_USER="$DB_USER"
+          export DB_PASSWORD="$DB_PASSWORD"
+          export DB_NAME="$DB_NAME"
           bash /tmp/import.sh
           
           EXIT_CODE=$?
