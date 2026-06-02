@@ -297,24 +297,24 @@ GET http://localhost:3000/health
 GET http://localhost:3000/
 
 ### =============================================================================
-### PRODUCTION (AWS EC2) - 6 VERBOS OAI-PMH
-### Base: http://ec2-54-175-239-106.compute-1.amazonaws.com/oai
+### PRODUCCION ACTUAL (AWS EC2) - 6 VERBOS OAI-PMH
+### Base: http://54.88.33.61/oai
 ### =============================================================================
 
 ### 1. IDENTIFY - Información del repositorio
-GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=Identify
+GET http://54.88.33.61/oai?verb=Identify
 
 ### 2. LISTMETADATAFORMATS - Formatos soportados
-GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=ListMetadataFormats
+GET http://54.88.33.61/oai?verb=ListMetadataFormats
 
 ### 3. LISTSETS - Conjuntos disponibles
-GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=ListSets
+GET http://54.88.33.61/oai?verb=ListSets
 
 ### 4. LISTIDENTIFIERS - Identificadores (ejemplo: persons)
-GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=persons
+GET http://54.88.33.61/oai?verb=ListIdentifiers&metadataPrefix=perucris-cerif&set=persons
 
-### 5. LISTRECORDS - Registros completos (ejemplo: publications)
-GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=ListRecords&metadataPrefix=perucris-cerif&set=publications
+### 5. LISTRECORDS - Registros completos (ejemplo: persons)
+GET http://54.88.33.61/oai?verb=ListRecords&metadataPrefix=perucris-cerif&set=persons
 
 ### 6. GETRECORD - Registro individual
-GET http://ec2-54-175-239-106.compute-1.amazonaws.com/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:ec2-54-175-239-106.compute-1.amazonaws.com:Persons/166
+GET http://54.88.33.61/oai?verb=GetRecord&metadataPrefix=perucris-cerif&identifier=oai:54.88.33.61:Persons/166

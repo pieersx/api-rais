@@ -20,6 +20,31 @@ import {
 
 const ENTITY_TYPE = 'Persons';
 
+const NORMALIZED_ORCID_SQL = `
+  REGEXP_REPLACE(
+    UPPER(
+      REGEXP_REPLACE(
+        REGEXP_REPLACE(TRIM(ui.codigo_orcid), '^https?://orcid\\.org/', '', 1, 0, 'i'),
+        '^orcid:[[:space:]]*',
+        '',
+        1,
+        0,
+        'i'
+      )
+    ),
+    '[[:space:]-]+',
+    ''
+  )
+`;
+
+const PERSON_REQUIRED_IDENTIFIER_FILTER = `
+  (
+    (UPPER(TRIM(ui.doc_tipo)) = 'DNI' AND TRIM(ui.doc_numero) REGEXP '^[0-9]{8}$')
+    OR
+    (ui.codigo_orcid IS NOT NULL AND ${NORMALIZED_ORCID_SQL} REGEXP '^[0-9]{15}[0-9X]$')
+  )
+`;
+
 function normalizeOrcid(orcid) {
   return normalizeOrcidToken(orcid);
 }
@@ -275,6 +300,7 @@ export async function countPersons(from, until) {
     FROM Usuario_investigador ui
     WHERE ui.estado = 1
       AND ui.sexo IN ('M', 'F')
+      AND ${PERSON_REQUIRED_IDENTIFIER_FILTER}
   `;
 
   if (dateFilter.clause) {
@@ -305,6 +331,7 @@ export async function getPersons({ from, until, offset = 0, limit = env.PAGE_SIZ
     LEFT JOIN Instituto i ON ui.instituto_id = i.id AND i.estado = 1
     WHERE ui.estado = 1
       AND ui.sexo IN ('M', 'F')
+      AND ${PERSON_REQUIRED_IDENTIFIER_FILTER}
   `;
 
   if (dateFilter.clause) {
@@ -337,6 +364,7 @@ export async function getPersonHeaders({ from, until, offset = 0, limit = env.PA
     FROM Usuario_investigador ui
     WHERE ui.estado = 1
       AND ui.sexo IN ('M', 'F')
+      AND ${PERSON_REQUIRED_IDENTIFIER_FILTER}
   `;
 
   if (dateFilter.clause) {
@@ -370,6 +398,7 @@ export async function getPersonById(id) {
     WHERE ui.id = ?
       AND ui.estado = 1
       AND ui.sexo IN ('M', 'F')
+      AND ${PERSON_REQUIRED_IDENTIFIER_FILTER}
   `;
 
   const [rows] = await pool.query(query, [id]);
