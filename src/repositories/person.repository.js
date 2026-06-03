@@ -39,11 +39,22 @@ const NORMALIZED_ORCID_SQL = `
 
 const PERSON_REQUIRED_IDENTIFIER_FILTER = `
   (
-    (UPPER(TRIM(ui.doc_tipo)) = 'DNI' AND TRIM(ui.doc_numero) REGEXP '^[0-9]{8}$')
+    (
+      UPPER(TRIM(ui.doc_tipo)) = 'DNI'
+      AND TRIM(ui.doc_numero) REGEXP '^[0-9]{8}$'
+      AND TRIM(ui.doc_numero) <> '00000000'
+    )
     OR
-    (ui.codigo_orcid IS NOT NULL AND ${NORMALIZED_ORCID_SQL} REGEXP '^[0-9]{15}[0-9X]$')
+    (
+      ui.codigo_orcid IS NOT NULL
+      AND ${NORMALIZED_ORCID_SQL} REGEXP '^[0-9]{15}[0-9X]$'
+      AND ${NORMALIZED_ORCID_SQL} <> '0000000000000000'
+    )
   )
 `;
+
+const PERSON_REQUIRED_DATE_FILTER = `COALESCE(ui.updated_at, ui.created_at) IS NOT NULL`;
+const PERSON_DATE_FIELD = 'COALESCE(ui.updated_at, ui.created_at)';
 
 function normalizeOrcid(orcid) {
   return normalizeOrcidToken(orcid);
@@ -165,7 +176,7 @@ function buildPersonHeader(row) {
     setSpec: 'persons',
   };
 
-  const datestamp = toISO8601(row.updated_at);
+  const datestamp = toISO8601(row.oai_datestamp || row.updated_at || row.created_at);
   if (datestamp) {
     header.datestamp = datestamp;
   }
@@ -187,7 +198,9 @@ function mapToCerif(row, affiliation = null) {
   const orcid = normalizeOrcid(row.codigo_orcid);
 
   const identifiers = filterEmpty([
-    documentType === 'DNI' && /^\d{8}$/.test(String(row.doc_numero || '').trim())
+    documentType === 'DNI'
+      && /^\d{8}$/.test(String(row.doc_numero || '').trim())
+      && String(row.doc_numero || '').trim() !== '00000000'
       ? createSchemeValueEntry(IDENTIFIER_SCHEMES.DNI, row.doc_numero)
       : null,
   ]);
@@ -247,7 +260,7 @@ function mapToCerif(row, affiliation = null) {
     Gender: GENDER_MAP[row.sexo],
   };
 
-  const lastModified = toISO8601(row.updated_at);
+  const lastModified = toISO8601(row.oai_datestamp || row.updated_at || row.created_at);
   if (lastModified) {
     person.LastModified = lastModified;
   }
@@ -294,13 +307,14 @@ function mapToCerif(row, affiliation = null) {
  * @returns {Promise<number>}
  */
 export async function countPersons(from, until) {
-  const dateFilter = buildDateFilter(from, until, 'ui.updated_at');
+  const dateFilter = buildDateFilter(from, until, PERSON_DATE_FIELD);
   let query = `
     SELECT COUNT(*) as total
     FROM Usuario_investigador ui
     WHERE ui.estado = 1
       AND ui.sexo IN ('M', 'F')
       AND ${PERSON_REQUIRED_IDENTIFIER_FILTER}
+      AND ${PERSON_REQUIRED_DATE_FILTER}
   `;
 
   if (dateFilter.clause) {
@@ -322,6 +336,7 @@ export async function getPersons({ from, until, offset = 0, limit = env.PAGE_SIZ
   let query = `
     SELECT 
       ui.*,
+      ${PERSON_DATE_FIELD} as oai_datestamp,
       f.id as facultad_id,
       f.nombre as facultad_nombre,
       i.id as instituto_id,
@@ -332,6 +347,7 @@ export async function getPersons({ from, until, offset = 0, limit = env.PAGE_SIZ
     WHERE ui.estado = 1
       AND ui.sexo IN ('M', 'F')
       AND ${PERSON_REQUIRED_IDENTIFIER_FILTER}
+      AND ${PERSON_REQUIRED_DATE_FILTER}
   `;
 
   if (dateFilter.clause) {
@@ -357,14 +373,15 @@ export async function getPersons({ from, until, offset = 0, limit = env.PAGE_SIZ
  * @returns {Promise<Array>}
  */
 export async function getPersonHeaders({ from, until, offset = 0, limit = env.PAGE_SIZE }) {
-  const dateFilter = buildDateFilter(from, until, 'ui.updated_at');
+  const dateFilter = buildDateFilter(from, until, PERSON_DATE_FIELD);
 
   let query = `
-    SELECT ui.id, ui.updated_at
+    SELECT ui.id, ${PERSON_DATE_FIELD} as oai_datestamp
     FROM Usuario_investigador ui
     WHERE ui.estado = 1
       AND ui.sexo IN ('M', 'F')
       AND ${PERSON_REQUIRED_IDENTIFIER_FILTER}
+      AND ${PERSON_REQUIRED_DATE_FILTER}
   `;
 
   if (dateFilter.clause) {
@@ -388,6 +405,7 @@ export async function getPersonById(id) {
   const query = `
     SELECT 
       ui.*,
+      ${PERSON_DATE_FIELD} as oai_datestamp,
       f.id as facultad_id,
       f.nombre as facultad_nombre,
       i.id as instituto_id,
@@ -399,6 +417,7 @@ export async function getPersonById(id) {
       AND ui.estado = 1
       AND ui.sexo IN ('M', 'F')
       AND ${PERSON_REQUIRED_IDENTIFIER_FILTER}
+      AND ${PERSON_REQUIRED_DATE_FILTER}
   `;
 
   const [rows] = await pool.query(query, [id]);

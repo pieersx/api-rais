@@ -168,6 +168,7 @@ export function normalizeOrcidToken(value) {
 
   const compact = withoutPrefix.replace(/-/g, '');
   if (!/^\d{15}[\dX]$/.test(compact)) return null;
+  if (compact === '0000000000000000') return null;
 
   return `${compact.slice(0, 4)}-${compact.slice(4, 8)}-${compact.slice(8, 12)}-${compact.slice(12)}`;
 }
