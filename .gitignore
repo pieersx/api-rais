@@ -48,6 +48,17 @@ infra/terraform/crash.log
 infra/terraform/*.tfvars
 !infra/terraform/*.tfvars.example
 
+# Local SSH/private keys
+*.pem
+scripts/*-key
+scripts/*-key.pub
+scripts/rais-prod-key
+scripts/rais-prod-key.pub
+
+# Local maintenance helpers
+scripts/connect-prod-db.sh
+scripts/db/fix-*.sh
+
 # Local database backups/dumps
 database/dumps/**
 !database/dumps/
