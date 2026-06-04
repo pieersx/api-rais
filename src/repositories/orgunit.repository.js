@@ -282,6 +282,46 @@ function mapLaboratorioToCerif(row) {
 }
 
 /**
+ * Mapea una linea de investigacion a formato CERIF OrgUnit
+ * @param {object} row
+ * @returns {object}
+ */
+function mapLineaInvestigacionToCerif(row) {
+  const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
+
+  const orgUnit = {
+    '@id': toCerifId(ENTITY_TYPE, `LI${row.id}`),
+    '@xmlns': NAMESPACES.PERUCRIS_CERIF,
+    Name: filterEmpty([buildName(row.nombre)]),
+    Type: buildDependencyTypeEntries(ORGUNIT_SUBTYPE_VALUES.RESEARCH_LINE),
+    UbiGeo: buildIdentifier(VOCABULARIES.ORGUNIT_UBIGEO, UNMSM_CODES.UBIGEO_LIMA),
+    LastModified: lastModified,
+  };
+
+  if (row.parent_id && row.parent_nombre) {
+    orgUnit.PartOf = buildPartOf(`LI${row.parent_id}`, row.parent_nombre);
+  } else if (row.facultad_id && row.facultad_nombre) {
+    orgUnit.PartOf = buildPartOf(`F${row.facultad_id}`, row.facultad_nombre);
+  } else {
+    orgUnit.PartOf = buildPartOf(String(UNMSM_ROOT.id), UNMSM_ROOT.nombre);
+  }
+
+  if (row.codigo) {
+    orgUnit.Identifier = filterEmpty([
+      buildIdentifier('https://w3id.org/cerif/vocab/IdentifierTypes#CRISID', row.codigo),
+    ]);
+  }
+
+  if (row.resolucion) {
+    orgUnit.Description = filterEmpty([
+      buildName(`Resolución: ${String(row.resolucion).trim()}`),
+    ]);
+  }
+
+  return orgUnit;
+}
+
+/**
  * Mapea un grupo de investigacion a formato CERIF OrgUnit
  * @param {object} row
  * @returns {object}
@@ -339,7 +379,7 @@ function mapGrupoToCerif(row) {
 }
 
 /**
- * Obtiene el conteo total de OrgUnits (Facultades + Institutos + Laboratorios + Grupos activos)
+ * Obtiene el conteo total de OrgUnits (Facultades + Institutos + Laboratorios + Lineas + Grupos activos)
  * @param {string} from
  * @param {string} until
  * @returns {Promise<number>}
@@ -373,8 +413,17 @@ export async function countOrgUnits(from, until) {
       AND TRIM(laboratorio) <> ''
   `);
 
+  // Contar lineas de investigacion activas
+  const [lineas] = await pool.query(`
+    SELECT COUNT(*) as total
+    FROM Linea_investigacion
+    WHERE estado = 1
+      AND nombre IS NOT NULL
+      AND TRIM(nombre) <> ''
+  `);
+
   // +1 por UNMSM root
-  return 1 + facultades[0].total + institutos[0].total + laboratorios[0].total + grupos[0].total;
+  return 1 + facultades[0].total + institutos[0].total + laboratorios[0].total + lineas[0].total + grupos[0].total;
 }
 
 /**
@@ -448,6 +497,33 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
       });
     }
 
+    const [lineas] = await pool.query(`
+      SELECT
+        li.*,
+        f.nombre as facultad_nombre,
+        parent.nombre as parent_nombre
+      FROM Linea_investigacion li
+      LEFT JOIN Facultad f ON li.facultad_id = f.id
+      LEFT JOIN Linea_investigacion parent ON li.parent_id = parent.id
+      WHERE li.estado = 1
+        AND li.nombre IS NOT NULL
+        AND TRIM(li.nombre) <> ''
+      ORDER BY li.id
+    `);
+
+    for (const linea of lineas) {
+      staticRecords.push({
+        header: {
+          identifier: toOAIIdentifier(ENTITY_TYPE, `LI${linea.id}`),
+          datestamp: toISO8601(linea.updated_at) || FALLBACK_DATE,
+          setSpec: 'orgunits',
+        },
+        metadata: {
+          OrgUnit: mapLineaInvestigacionToCerif(linea),
+        },
+      });
+    }
+
     if (currentOffset < staticRecords.length) {
       const page = staticRecords.slice(currentOffset, currentOffset + remaining);
       results.push(...page);
@@ -515,6 +591,36 @@ export async function getOrgUnitById(id) {
 
   const prefix = id.charAt(0);
   const numId = id.substring(1);
+
+  // Linea de investigacion
+  if (id.startsWith('LI')) {
+    const lineaId = id.substring(2);
+    const [rows] = await pool.query(`
+      SELECT
+        li.*,
+        f.nombre as facultad_nombre,
+        parent.nombre as parent_nombre
+      FROM Linea_investigacion li
+      LEFT JOIN Facultad f ON li.facultad_id = f.id
+      LEFT JOIN Linea_investigacion parent ON li.parent_id = parent.id
+      WHERE li.id = ?
+        AND li.estado = 1
+        AND li.nombre IS NOT NULL
+        AND TRIM(li.nombre) <> ''
+    `, [lineaId]);
+    if (rows.length === 0) return null;
+
+    return {
+      header: {
+        identifier: toOAIIdentifier(ENTITY_TYPE, id),
+        datestamp: toISO8601(rows[0].updated_at) || FALLBACK_DATE,
+        setSpec: 'orgunits',
+      },
+      metadata: {
+        OrgUnit: mapLineaInvestigacionToCerif(rows[0]),
+      },
+    };
+  }
 
   // Facultad
   if (prefix === 'F') {
