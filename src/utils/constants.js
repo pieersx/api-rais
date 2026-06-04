@@ -277,6 +277,7 @@ export const CONCYTEC_PROJECT_STATUS_MAP = {
   0: `${VOCABULARIES.CONCYTEC_PROJECT_STATUS}#suspendido`,
   1: `${VOCABULARIES.CONCYTEC_PROJECT_STATUS}#activo`,
   2: `${VOCABULARIES.CONCYTEC_PROJECT_STATUS}#concluido`,
+  7: `${VOCABULARIES.CONCYTEC_PROJECT_STATUS}#concluido`,
 }
 
 export const PROJECT_TYPE_OCDE_MAP = {
@@ -290,8 +291,10 @@ export const PROJECT_TYPE_OCDE_MAP = {
   PINVPOS: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionAplicada',
   PFEX: 'https://purl.org/pe-repo/ocde/tipoProyecto#desarrolloExperimental',
   ECI: 'https://purl.org/pe-repo/ocde/tipoProyecto#innovacionTecnologica',
+  PINTERDIS: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionAplicada',
   'PRO-CTIE':
     'https://purl.org/pe-repo/ocde/tipoProyecto#innovacionTecnologica',
+  SPINOFF: 'https://purl.org/pe-repo/ocde/tipoProyecto#innovacionDeProducto',
   PTPGRADO: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionAplicada',
   PTPMAEST: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionAplicada',
   PTPDOCTO: 'https://purl.org/pe-repo/ocde/tipoProyecto#investigacionAplicada',

@@ -43,6 +43,9 @@ const PROJECT_HAS_FUNDING_DATA = `
     ) > 0
   )
 `;
+const PROJECT_HAS_REQUIRED_IDENTIFIER = `
+  (p.codigo_proyecto IS NOT NULL AND TRIM(p.codigo_proyecto) <> '')
+`;
 const REAL_EXTERNAL_PROJECT = `
   (
     LOWER(TRIM(COALESCE(p.tipo_proyecto, ''))) = 'pfex'
@@ -63,6 +66,8 @@ const PROJECT_HAS_REAL_PI = `
 `;
 const STRICT_PROJECT_ELIGIBILITY = `
   (
+    ${PROJECT_HAS_REQUIRED_IDENTIFIER}
+    AND
     ${PROJECT_HAS_FUNDING_DATA}
     AND ${PROJECT_HAS_REAL_PI}
     AND (NOT ${REAL_EXTERNAL_PROJECT} OR ef.external_funder_count = 1)
@@ -107,8 +112,18 @@ function hasFundingData(row) {
 }
 
 function buildParticipantRole(integrante) {
-  const rawRole = String(integrante.tipo_nombre || integrante.condicion || integrante.responsabilidad || '').trim();
-  return rawRole || null;
+  const roles = [
+    integrante.tipo_nombre,
+    integrante.condicion,
+    integrante.responsabilidad,
+  ]
+    .map(normalizeHumanText)
+    .filter(Boolean);
+
+  if (roles.length === 0) return null;
+
+  const principalRole = roles.find(role => isPrincipalRole(role));
+  return principalRole || roles[0];
 }
 
 function normalizeHumanText(value) {
