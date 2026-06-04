@@ -29,7 +29,10 @@ const ADVISOR_CATEGORIES = new Set(['asesor', 'co-asesor', 'co asesor']);
 const RENATI_THESIS_TYPE_URI = `${VOCABULARIES.RENATI_TYPE}#tesis`;
 const ACCESS_RIGHTS_VOCABULARY = VOCABULARIES.COAR_ACCESS_RIGHTS;
 const HAS_REAL_DOI_SQL = `TRIM(COALESCE(p.doi, '')) NOT IN ('', '-', '--', '---')`;
-const HAS_REAL_HANDLE_SQL = `TRIM(COALESCE(p.uri, '')) NOT IN ('', '-', '--', '---')`;
+const HAS_REAL_HANDLE_SQL = `(
+  TRIM(COALESCE(p.uri, '')) NOT IN ('', '-', '--', '---')
+  AND LOWER(p.uri) REGEXP '^[[:space:]]*((https?://)?hdl\\\\.handle\\\\.net/.+|https?://[^[:space:]]+/handle/.+|20\\\\.500\\\\..+)'
+)`;
 const HAS_REAL_TOP_LEVEL_BOOK_OR_SERIAL_SQL = `(
   LOWER(TRIM(COALESCE(p.tipo_publicacion, ''))) NOT IN ('articulo', 'evento', 'ensayo', 'capitulo')
   AND (
@@ -178,6 +181,33 @@ function normalizeIdentifierValue(value) {
   return trimmed;
 }
 
+function normalizeDoiValue(value) {
+  const identifier = normalizeIdentifierValue(value);
+  if (!identifier) return null;
+
+  return identifier
+    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '')
+    .replace(/^doi:\s*/i, '')
+    .trim();
+}
+
+function normalizeHandleValue(value) {
+  const identifier = normalizeIdentifierValue(value);
+  if (!identifier) return null;
+
+  const trimmed = identifier.trim();
+  const lower = trimmed.toLowerCase();
+
+  if (/^https?:\/\/hdl\.handle\.net\//i.test(trimmed)) return trimmed;
+  if (/^hdl\.handle\.net\//i.test(trimmed)) return `https://${trimmed}`;
+  if (/^20\.500\./i.test(trimmed)) return `https://hdl.handle.net/${trimmed}`;
+
+  const match = lower.match(/\/handle\/([^?#\s]+)/);
+  if (!match) return null;
+
+  return `https://hdl.handle.net/${trimmed.match(/\/handle\/([^?#\s]+)/i)[1]}`;
+}
+
 function normalizePublicationType(value) {
   return normalizeCategory(value);
 }
@@ -197,8 +227,8 @@ function humanizeThesisLevel(value) {
 function buildTopLevelIdentifiers(row) {
   const publicationType = normalizePublicationType(row.tipo_publicacion);
   const identifiers = filterEmpty([
-    normalizeIdentifierValue(row.doi) ? { Type: 'DOI', Value: normalizeIdentifierValue(row.doi) } : null,
-    normalizeIdentifierValue(row.uri) ? { Type: 'Handle', Value: normalizeIdentifierValue(row.uri) } : null,
+    normalizeDoiValue(row.doi) ? { Type: 'DOI', Value: normalizeDoiValue(row.doi) } : null,
+    normalizeHandleValue(row.uri) ? { Type: 'Handle', Value: normalizeHandleValue(row.uri) } : null,
     !CONTAINER_IDENTIFIER_PUBLICATION_TYPES.has(publicationType) && normalizeIdentifierValue(row.isbn)
       ? { Type: 'ISBN', Value: normalizeIdentifierValue(row.isbn) }
       : null,
@@ -487,7 +517,7 @@ function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes 
   const containerIsbn = filterEmpty([row.isbn].map(normalizeIdentifierValue));
   const containerTitle = row.publicacion_nombre || row.nombre_libro;
 
-  if (containerTitle || containerIssn.length > 0 || containerIsbn.length > 0) {
+  if (SERIAL_PUBLICATION_TYPES.has(row.tipo_publicacion) && (containerTitle || containerIssn.length > 0)) {
     const containerType = containerIssn.length > 0 ? JOURNAL_CONTAINER_TYPE : BOOK_CONTAINER_TYPE;
 
     const embeddedPublication = {
@@ -501,10 +531,6 @@ function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes 
 
     if (containerIssn.length > 0) {
       embeddedPublication.ISSN = [...new Set(containerIssn)];
-    }
-
-    if (containerIsbn.length > 0) {
-      embeddedPublication.ISBN = [...new Set(containerIsbn)];
     }
 
     publication.PublishedIn = {
