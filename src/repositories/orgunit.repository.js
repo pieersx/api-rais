@@ -240,6 +240,48 @@ function mapInstitutoToCerif(row) {
 }
 
 /**
+ * Mapea un laboratorio a formato CERIF OrgUnit
+ * @param {object} row
+ * @returns {object}
+ */
+function mapLaboratorioToCerif(row) {
+  const orgUnit = {
+    '@id': toCerifId(ENTITY_TYPE, `L${row.id}`),
+    '@xmlns': NAMESPACES.PERUCRIS_CERIF,
+    Name: filterEmpty([buildName(row.laboratorio)]),
+    Type: buildDependencyTypeEntries(ORGUNIT_SUBTYPE_VALUES.RESEARCH_UNIT),
+    UbiGeo: buildIdentifier(VOCABULARIES.ORGUNIT_UBIGEO, UNMSM_CODES.UBIGEO_LIMA),
+    Keywords: [{ Value: 'Laboratorio' }],
+    LastModified: FALLBACK_DATE,
+  };
+
+  orgUnit.PartOf = row.facultad_id && row.facultad_nombre
+    ? buildPartOf(`F${row.facultad_id}`, row.facultad_nombre)
+    : buildPartOf(String(UNMSM_ROOT.id), UNMSM_ROOT.nombre);
+
+  if (row.codigo) {
+    orgUnit.Identifier = filterEmpty([
+      buildIdentifier('https://w3id.org/cerif/vocab/IdentifierTypes#CRISID', row.codigo),
+    ]);
+  }
+
+  const descriptionParts = [];
+  if (row.responsable) descriptionParts.push(`Responsable: ${String(row.responsable).trim()}`);
+  if (row.categoria_uso) descriptionParts.push(`Categoría de uso: ${String(row.categoria_uso).trim()}`);
+  if (descriptionParts.length > 0) {
+    orgUnit.Description = filterEmpty([
+      buildName(descriptionParts.join('. ')),
+    ]);
+  }
+
+  if (row.ubicacion) {
+    orgUnit.Address = { Street: String(row.ubicacion).trim() };
+  }
+
+  return orgUnit;
+}
+
+/**
  * Mapea un grupo de investigacion a formato CERIF OrgUnit
  * @param {object} row
  * @returns {object}
@@ -297,7 +339,7 @@ function mapGrupoToCerif(row) {
 }
 
 /**
- * Obtiene el conteo total de OrgUnits (Facultades + Institutos + Grupos activos)
+ * Obtiene el conteo total de OrgUnits (Facultades + Institutos + Laboratorios + Grupos activos)
  * @param {string} from
  * @param {string} until
  * @returns {Promise<number>}
@@ -323,8 +365,16 @@ export async function countOrgUnits(from, until) {
   // Contar institutos activos (sin updated_at en origen)
   const [institutos] = await pool.query('SELECT COUNT(*) as total FROM Instituto WHERE estado = 1');
 
+  // Contar laboratorios con nombre (sin updated_at en origen)
+  const [laboratorios] = await pool.query(`
+    SELECT COUNT(*) as total
+    FROM Laboratorio
+    WHERE laboratorio IS NOT NULL
+      AND TRIM(laboratorio) <> ''
+  `);
+
   // +1 por UNMSM root
-  return 1 + facultades[0].total + institutos[0].total + grupos[0].total;
+  return 1 + facultades[0].total + institutos[0].total + laboratorios[0].total + grupos[0].total;
 }
 
 /**
@@ -372,6 +422,28 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
         },
         metadata: {
           OrgUnit: mapInstitutoToCerif(inst),
+        },
+      });
+    }
+
+    const [laboratorios] = await pool.query(`
+      SELECT l.*, f.nombre as facultad_nombre
+      FROM Laboratorio l
+      LEFT JOIN Facultad f ON l.facultad_id = f.id
+      WHERE l.laboratorio IS NOT NULL
+        AND TRIM(l.laboratorio) <> ''
+      ORDER BY l.id
+    `);
+
+    for (const lab of laboratorios) {
+      staticRecords.push({
+        header: {
+          identifier: toOAIIdentifier(ENTITY_TYPE, `L${lab.id}`),
+          datestamp: FALLBACK_DATE,
+          setSpec: 'orgunits',
+        },
+        metadata: {
+          OrgUnit: mapLaboratorioToCerif(lab),
         },
       });
     }
@@ -479,6 +551,30 @@ export async function getOrgUnitById(id) {
       },
       metadata: {
         OrgUnit: mapInstitutoToCerif(rows[0]),
+      },
+    };
+  }
+
+  // Laboratorio
+  if (prefix === 'L') {
+    const [rows] = await pool.query(`
+      SELECT l.*, f.nombre as facultad_nombre
+      FROM Laboratorio l
+      LEFT JOIN Facultad f ON l.facultad_id = f.id
+      WHERE l.id = ?
+        AND l.laboratorio IS NOT NULL
+        AND TRIM(l.laboratorio) <> ''
+    `, [numId]);
+    if (rows.length === 0) return null;
+
+    return {
+      header: {
+        identifier: toOAIIdentifier(ENTITY_TYPE, id),
+        datestamp: FALLBACK_DATE,
+        setSpec: 'orgunits',
+      },
+      metadata: {
+        OrgUnit: mapLaboratorioToCerif(rows[0]),
       },
     };
   }
