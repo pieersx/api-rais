@@ -133,19 +133,6 @@ function mapToCerif(row) {
     ]);
   }
 
-  if (contacto) {
-    equipment.Contact = {
-      value: contacto,
-    };
-  }
-
-  if (row.area_mt2 && Number(row.area_mt2) > 0) {
-    equipment.Area = {
-      value: Number(row.area_mt2),
-      unit: 'm2',
-    };
-  }
-
   return equipment;
 }
 

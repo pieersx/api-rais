@@ -330,11 +330,15 @@ export const FUNDING_TYPE_VALUES = {
 export const EQUIPMENT_TYPE_KEYWORDS = [
   ['centrif', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#centrifugadoras`],
   [
-    'computadora',
+    'servidor',
     `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#computadorasDeAltoDesempeno`,
   ],
   [
-    'servidor',
+    'workstation',
+    `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#computadorasDeAltoDesempeno`,
+  ],
+  [
+    'think station',
     `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#computadorasDeAltoDesempeno`,
   ],
   ['cromatograf', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#cromatografos`],
@@ -357,13 +361,67 @@ export const EQUIPMENT_TYPE_KEYWORDS = [
   ['fluorescencia', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#equiposDeRayosX`],
   ['espectrom', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#espectrometros`],
   ['microscop', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#microscopios`],
+  ['estereoscop', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#microscopios`],
   ['radar', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#radares`],
   ['refriger', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#refrigeradores`],
   ['congelador', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#refrigeradores`],
   ['freezer', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#refrigeradores`],
   ['transceptor', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#transceptores`],
   ['radio', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#transceptores`],
+  ['sism', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#equiposSismicos`],
   ['pcr', `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`],
+  [
+    'termocicl',
+    `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`,
+  ],
+  [
+    'electroforesis',
+    `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`,
+  ],
+  [
+    'transiluminador',
+    `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`,
+  ],
+  [
+    'documentacion de gel',
+    `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`,
+  ],
+  [
+    'micropipeta',
+    `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`,
+  ],
+  [
+    'pipeta',
+    `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`,
+  ],
+  [
+    'peachimetro',
+    `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`,
+  ],
+  [
+    'phmetro',
+    `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`,
+  ],
+  [
+    'oximetro',
+    `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`,
+  ],
+  [
+    'refractometro',
+    `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`,
+  ],
+  [
+    'balanza',
+    `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`,
+  ],
+  [
+    'incubadora',
+    `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`,
+  ],
+  [
+    'autoclave',
+    `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`,
+  ],
   [
     'secuenci',
     `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#instrumentosBioanaliticos`,
@@ -382,6 +440,14 @@ export const EQUIPMENT_TYPE_KEYWORDS = [
   ],
   [
     'materiales',
+    `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#equiposDeProcesamientoyEnsayoDeMateriales`,
+  ],
+  [
+    'impresora 3d',
+    `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#equiposDeProcesamientoyEnsayoDeMateriales`,
+  ],
+  [
+    'escaner 3d',
     `${VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES}#equiposDeProcesamientoyEnsayoDeMateriales`,
   ],
   [
