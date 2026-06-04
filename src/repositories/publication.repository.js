@@ -28,17 +28,32 @@ const EDITOR_CATEGORIES = new Set(['editor']);
 const ADVISOR_CATEGORIES = new Set(['asesor', 'co-asesor', 'co asesor']);
 const RENATI_THESIS_TYPE_URI = `${VOCABULARIES.RENATI_TYPE}#tesis`;
 const ACCESS_RIGHTS_VOCABULARY = VOCABULARIES.COAR_ACCESS_RIGHTS;
-const HAS_REAL_DOI_SQL = `TRIM(COALESCE(p.doi, '')) NOT IN ('', '-', '--', '---')`;
+const HAS_REAL_DOI_SQL = `(
+  TRIM(COALESCE(p.doi, '')) NOT IN ('', '-', '--', '---')
+  AND LOWER(REPLACE(p.doi, '%2f', '/')) REGEXP '10\\\\.[^[:space:]]+/[^[:space:]]+'
+)`;
 const HAS_REAL_HANDLE_SQL = `(
   TRIM(COALESCE(p.uri, '')) NOT IN ('', '-', '--', '---')
   AND LOWER(p.uri) REGEXP '^[[:space:]]*((https?://)?hdl\\\\.handle\\\\.net/.+|https?://[^[:space:]]+/handle/.+|20\\\\.500\\\\..+)'
 )`;
+const HAS_REAL_ISBN_SQL = `(
+  TRIM(COALESCE(p.isbn, '')) NOT IN ('', '-', '--', '---')
+  AND REPLACE(REPLACE(UPPER(TRIM(p.isbn)), '-', ''), ' ', '') REGEXP '^[0-9]{9}[0-9X]$|^[0-9]{13}$'
+)`;
+const HAS_REAL_ISSN_SQL = `(
+  TRIM(COALESCE(p.issn, '')) NOT IN ('', '-', '--', '---')
+  AND REPLACE(UPPER(TRIM(p.issn)), '-', '') REGEXP '^[0-9]{7}[0-9X]$'
+)`;
+const HAS_REAL_ISSNE_SQL = `(
+  TRIM(COALESCE(p.issn_e, '')) NOT IN ('', '-', '--', '---')
+  AND REPLACE(UPPER(TRIM(p.issn_e)), '-', '') REGEXP '^[0-9]{7}[0-9X]$'
+)`;
 const HAS_REAL_TOP_LEVEL_BOOK_OR_SERIAL_SQL = `(
   LOWER(TRIM(COALESCE(p.tipo_publicacion, ''))) NOT IN ('articulo', 'evento', 'ensayo', 'capitulo')
   AND (
-    TRIM(COALESCE(p.isbn, '')) NOT IN ('', '-', '--', '---')
-    OR TRIM(COALESCE(p.issn, '')) NOT IN ('', '-', '--', '---')
-    OR TRIM(COALESCE(p.issn_e, '')) NOT IN ('', '-', '--', '---')
+    ${HAS_REAL_ISBN_SQL}
+    OR ${HAS_REAL_ISSN_SQL}
+    OR ${HAS_REAL_ISSNE_SQL}
   )
 )`;
 const STRICT_PUBLICATION_IDENTIFIER_SQL = `(
@@ -185,10 +200,16 @@ function normalizeDoiValue(value) {
   const identifier = normalizeIdentifierValue(value);
   if (!identifier) return null;
 
-  return identifier
+  const normalized = identifier
+    .replace(/%2f/gi, '/')
     .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '')
     .replace(/^doi:\s*/i, '')
     .trim();
+
+  const match = normalized.match(/10\.\S+\/\S+/i);
+  if (!match) return null;
+
+  return match[0].replace(/[),.;]+$/g, '');
 }
 
 function normalizeHandleValue(value) {
@@ -212,6 +233,26 @@ function normalizePublicationType(value) {
   return normalizeCategory(value);
 }
 
+function normalizeIsbnValue(value) {
+  const identifier = normalizeIdentifierValue(value);
+  if (!identifier) return null;
+
+  const compact = identifier.replace(/[-\s]/g, '').toUpperCase();
+  if (!/^(?:\d{9}[\dX]|\d{13})$/.test(compact)) return null;
+
+  return identifier.trim();
+}
+
+function normalizeIssnValue(value) {
+  const identifier = normalizeIdentifierValue(value);
+  if (!identifier) return null;
+
+  const compact = identifier.replace(/-/g, '').toUpperCase();
+  if (!/^\d{7}[\dX]$/.test(compact)) return null;
+
+  return `${compact.slice(0, 4)}-${compact.slice(4)}`;
+}
+
 function humanizeThesisLevel(value) {
   const key = normalizeTextKey(value).replace(/_/g, ' ');
   if (!key) return null;
@@ -229,14 +270,14 @@ function buildTopLevelIdentifiers(row) {
   const identifiers = filterEmpty([
     normalizeDoiValue(row.doi) ? { Type: 'DOI', Value: normalizeDoiValue(row.doi) } : null,
     normalizeHandleValue(row.uri) ? { Type: 'Handle', Value: normalizeHandleValue(row.uri) } : null,
-    !CONTAINER_IDENTIFIER_PUBLICATION_TYPES.has(publicationType) && normalizeIdentifierValue(row.isbn)
-      ? { Type: 'ISBN', Value: normalizeIdentifierValue(row.isbn) }
+    !CONTAINER_IDENTIFIER_PUBLICATION_TYPES.has(publicationType) && normalizeIsbnValue(row.isbn)
+      ? { Type: 'ISBN', Value: normalizeIsbnValue(row.isbn) }
       : null,
-    !CONTAINER_IDENTIFIER_PUBLICATION_TYPES.has(publicationType) && normalizeIdentifierValue(row.issn)
-      ? { Type: 'ISSN', Value: normalizeIdentifierValue(row.issn) }
+    !CONTAINER_IDENTIFIER_PUBLICATION_TYPES.has(publicationType) && normalizeIssnValue(row.issn)
+      ? { Type: 'ISSN', Value: normalizeIssnValue(row.issn) }
       : null,
-    !CONTAINER_IDENTIFIER_PUBLICATION_TYPES.has(publicationType) && normalizeIdentifierValue(row.issn_e)
-      ? { Type: 'ISSN', Value: normalizeIdentifierValue(row.issn_e) }
+    !CONTAINER_IDENTIFIER_PUBLICATION_TYPES.has(publicationType) && normalizeIssnValue(row.issn_e)
+      ? { Type: 'ISSN', Value: normalizeIssnValue(row.issn_e) }
       : null,
   ]);
 
@@ -513,16 +554,13 @@ function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes 
     }
   }
 
-  const containerIssn = filterEmpty([row.issn, row.issn_e].map(normalizeIdentifierValue));
-  const containerIsbn = filterEmpty([row.isbn].map(normalizeIdentifierValue));
+  const containerIssn = filterEmpty([row.issn, row.issn_e].map(normalizeIssnValue));
   const containerTitle = row.publicacion_nombre || row.nombre_libro;
 
   if (SERIAL_PUBLICATION_TYPES.has(row.tipo_publicacion) && (containerTitle || containerIssn.length > 0)) {
-    const containerType = containerIssn.length > 0 ? JOURNAL_CONTAINER_TYPE : BOOK_CONTAINER_TYPE;
-
     const embeddedPublication = {
       id: toCerifId('Publications', `SRC-${row.id}`),
-      Type: containerType,
+      Type: JOURNAL_CONTAINER_TYPE,
     };
 
     if (containerTitle) {
@@ -548,7 +586,7 @@ function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes 
       partOfPublication.Title = filterEmpty([createTextValueEntry(String(row.nombre_libro), 'es')]);
     }
 
-    const partOfIsbn = normalizeIdentifierValue(row.isbn);
+    const partOfIsbn = normalizeIsbnValue(row.isbn);
     if (partOfIsbn) {
       partOfPublication.ISBN = [partOfIsbn];
     }
