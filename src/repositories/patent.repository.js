@@ -14,6 +14,12 @@ import {
 } from '../utils/formatters.js'
 
 const ENTITY_TYPE = 'Patents'
+const PATENT_ELIGIBILITY_SQL = `
+  p.estado = 1
+  AND TRIM(COALESCE(p.nro_registro, '')) <> ''
+  AND TRIM(COALESCE(p.titulo, '')) <> ''
+  AND p.updated_at IS NOT NULL
+`
 
 function normalizeOrcid(orcid) {
   return normalizeOrcidToken(orcid)
@@ -31,6 +37,13 @@ function buildPatentHeader(row) {
   }
 
   return header
+}
+
+function normalizeAbstractPart(value) {
+  const text = String(value || '').trim()
+  if (!text) return null
+
+  return text.replace(/[.\s]+$/u, '')
 }
 
 function mapToCerif(row, inventors = [], holders = []) {
@@ -64,10 +77,6 @@ function mapToCerif(row, inventors = [], holders = []) {
 
   if (lastModified) {
     patent.LastModified = lastModified
-  }
-
-  if (ipcClassification.note) {
-    patent.Notes = [ipcClassification.note]
   }
 
   if (inventors.length > 0) {
@@ -167,8 +176,9 @@ function mapToCerif(row, inventors = [], holders = []) {
         : row.fecha_presentacion
   }
 
-  if (row.comentario) {
-    abstractParts.push(String(row.comentario).trim())
+  const comment = normalizeAbstractPart(row.comentario)
+  if (comment) {
+    abstractParts.push(comment)
   }
 
   if (row.enlace) {
@@ -176,7 +186,7 @@ function mapToCerif(row, inventors = [], holders = []) {
   }
 
   if (row.nro_expediente) {
-    abstractParts.push(`Expediente: ${row.nro_expediente}`)
+    abstractParts.push(`Expediente: ${String(row.nro_expediente).trim()}`)
   }
 
   if (abstractParts.length > 0) {
@@ -238,7 +248,7 @@ async function getPatentContext(patentId) {
 export async function countPatents(from, until) {
   const dateFilter = buildDateFilter(from, until, 'p.updated_at')
 
-  let query = 'SELECT COUNT(*) as total FROM Patente p WHERE p.estado = 1'
+  let query = `SELECT COUNT(*) as total FROM Patente p WHERE ${PATENT_ELIGIBILITY_SQL}`
 
   if (dateFilter.clause) {
     query += ` AND ${dateFilter.clause}`
@@ -264,7 +274,7 @@ export async function getPatents({
   let query = `
     SELECT p.*
     FROM Patente p
-    WHERE p.estado = 1
+    WHERE ${PATENT_ELIGIBILITY_SQL}
   `
 
   if (dateFilter.clause) {
@@ -306,7 +316,7 @@ export async function getPatentHeaders({
   let query = `
     SELECT p.id, p.updated_at
     FROM Patente p
-    WHERE p.estado = 1
+    WHERE ${PATENT_ELIGIBILITY_SQL}
   `
 
   if (dateFilter.clause) {
@@ -331,7 +341,7 @@ export async function getPatentById(id) {
       SELECT p.*
       FROM Patente p
       WHERE p.id = ?
-        AND p.estado = 1
+        AND ${PATENT_ELIGIBILITY_SQL}
     `,
     [id]
   )
