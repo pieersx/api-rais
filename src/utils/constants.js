@@ -153,8 +153,8 @@ export const PUBLICATION_TYPE_MAP = {
   articulo: 'http://purl.org/coar/resource_type/c_6501', // journal article
   libro: 'http://purl.org/coar/resource_type/c_2f33', // book
   capitulo: 'http://purl.org/coar/resource_type/c_3248', // book chapter
-  tesis: 'http://purl.org/coar/resource_type/c_db06', // doctoral thesis
-  'tesis-asesoria': 'http://purl.org/coar/resource_type/c_db06', // doctoral thesis
+  tesis: 'http://purl.org/coar/resource_type/c_46ec', // thesis
+  'tesis-asesoria': 'http://purl.org/coar/resource_type/c_46ec', // thesis
   evento: 'http://purl.org/coar/resource_type/c_c94f', // conference paper
   ensayo: 'http://purl.org/coar/resource_type/c_dcae04bc', // review article
   default: 'http://purl.org/coar/resource_type/c_1843', // other
