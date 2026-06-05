@@ -28,6 +28,10 @@ const EDITOR_CATEGORIES = new Set(['editor']);
 const ADVISOR_CATEGORIES = new Set(['asesor', 'co-asesor', 'co asesor']);
 const RENATI_THESIS_TYPE_URI = `${VOCABULARIES.RENATI_TYPE}#tesis`;
 const ACCESS_RIGHTS_VOCABULARY = VOCABULARIES.COAR_ACCESS_RIGHTS;
+const COAR_THESIS_TYPE_URI = 'http://purl.org/coar/resource_type/c_46ec';
+const COAR_BACHELOR_THESIS_TYPE_URI = 'http://purl.org/coar/resource_type/c_7a1f';
+const COAR_MASTER_THESIS_TYPE_URI = 'http://purl.org/coar/resource_type/c_bdcc';
+const COAR_DOCTORAL_THESIS_TYPE_URI = 'http://purl.org/coar/resource_type/c_db06';
 const HAS_REAL_DOI_SQL = `(
   TRIM(COALESCE(p.doi, '')) NOT IN ('', '-', '--', '---')
   AND LOWER(REPLACE(p.doi, '%2f', '/')) REGEXP '10\\\\.[^[:space:]]+/[^[:space:]]+'
@@ -152,6 +156,26 @@ function mapRenatiLevelUri(tipoTesis) {
   }
 
   return null;
+}
+
+function mapCoarPublicationType(row) {
+  if (!isThesisPublication(row)) {
+    return PUBLICATION_TYPE_MAP[row.tipo_publicacion] || PUBLICATION_TYPE_MAP.default;
+  }
+
+  const key = normalizeTextKey(row.tipo_tesis || row.tipo_doc).replace(/_/g, ' ');
+
+  if (key.includes('doctor')) {
+    return COAR_DOCTORAL_THESIS_TYPE_URI;
+  }
+  if (key.includes('maestr')) {
+    return COAR_MASTER_THESIS_TYPE_URI;
+  }
+  if (key.includes('bachiller')) {
+    return COAR_BACHELOR_THESIS_TYPE_URI;
+  }
+
+  return COAR_THESIS_TYPE_URI;
 }
 
 function mapRenatiWorkTypeUri(tipoDoc) {
@@ -418,7 +442,7 @@ function buildEditorEntryFromName(name) {
 }
 
 function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes = [] } = {}) {
-  const typeUri = PUBLICATION_TYPE_MAP[row.tipo_publicacion] || PUBLICATION_TYPE_MAP.default;
+  const typeUri = mapCoarPublicationType(row);
   const lastModified = toISO8601(row.updated_at);
   const titleValue = row.titulo ? String(row.titulo).trim() : '';
   const language = parseLanguage(row.idioma);
