@@ -103,6 +103,19 @@ function buildFundingType(row) {
   return FUNDING_TYPE_VALUES.INTERNAL;
 }
 
+function buildFundingTypeEntry(value) {
+  if (!value) return null;
+
+  return {
+    Scheme: VOCABULARIES.OPENAIRE_FUNDING_TYPES,
+    Value: value,
+  };
+}
+
+function buildFundingTypeEntries(value) {
+  return filterEmpty([buildFundingTypeEntry(value)]);
+}
+
 function buildFundingAmount(row) {
   const presupuestoTotal = Number(row.monto_presupuesto_total || 0);
   const totalFromAportes =
@@ -221,6 +234,7 @@ function buildParentFunding(row) {
   return {
     Funding: {
       id: toCerifId(ENTITY_TYPE, `${CONVOCATORIA_FUNDING_PREFIX}${convocatoria.id}`),
+      Type: buildFundingTypeEntries(FUNDING_TYPE_VALUES.CALL),
       ...(name
         ? {
             Name: filterEmpty([createTextValueEntry(name, 'es')]),
@@ -269,6 +283,7 @@ function buildConvocatoriaParentFunding(row) {
   return {
     Funding: {
       id: toCerifId(ENTITY_TYPE, `${CONVOCATORIA_FUNDING_PREFIX}${row.parent_exportable_id}`),
+      Type: buildFundingTypeEntries(FUNDING_TYPE_VALUES.PROGRAMME),
       ...(parentName
         ? {
             Name: filterEmpty([createTextValueEntry(parentName, 'es')]),
@@ -286,10 +301,7 @@ function mapConvocatoriaToCerif(row) {
   const funding = {
     '@id': toCerifId(ENTITY_TYPE, fundingId),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    Type: {
-      Scheme: VOCABULARIES.OPENAIRE_FUNDING_TYPES,
-      Value: buildConvocatoriaType(row),
-    },
+    Type: buildFundingTypeEntries(buildConvocatoriaType(row)),
     Name: filterEmpty([createTextValueEntry(fundingName, 'es')]),
     Identifier: filterEmpty([
       createSchemeValueEntry(IDENTIFIER_SCHEMES.AWARD_NUMBER, row.id),
@@ -407,10 +419,7 @@ function mapToCerif(row) {
   const funding = {
     '@id': toCerifId(ENTITY_TYPE, fundingId),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    Type: {
-      Scheme: VOCABULARIES.OPENAIRE_FUNDING_TYPES,
-      Value: fundingType,
-    },
+    Type: buildFundingTypeEntries(fundingType),
     Name: filterEmpty([createTextValueEntry(fundingName, 'es')]),
     Funder: funders,
     OAMandate: {
