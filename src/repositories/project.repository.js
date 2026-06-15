@@ -299,7 +299,7 @@ function mapToCerif(row, integrantes = [], ocde = null, abstract = null, equipme
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Consortium: consortium,
     OAMandate: {
-      Mandated: false,
+      mandated: false,
     },
   };
 

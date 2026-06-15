@@ -112,10 +112,6 @@ function buildFundingTypeEntry(value) {
   };
 }
 
-function buildFundingTypeEntries(value) {
-  return filterEmpty([buildFundingTypeEntry(value)]);
-}
-
 function buildFundingAmount(row) {
   const presupuestoTotal = Number(row.monto_presupuesto_total || 0);
   const totalFromAportes =
@@ -234,7 +230,7 @@ function buildParentFunding(row) {
   return {
     Funding: {
       id: toCerifId(ENTITY_TYPE, `${CONVOCATORIA_FUNDING_PREFIX}${convocatoria.id}`),
-      Type: buildFundingTypeEntries(FUNDING_TYPE_VALUES.CALL),
+      Type: buildFundingTypeEntry(FUNDING_TYPE_VALUES.CALL),
       ...(name
         ? {
             Name: filterEmpty([createTextValueEntry(name, 'es')]),
@@ -283,7 +279,7 @@ function buildConvocatoriaParentFunding(row) {
   return {
     Funding: {
       id: toCerifId(ENTITY_TYPE, `${CONVOCATORIA_FUNDING_PREFIX}${row.parent_exportable_id}`),
-      Type: buildFundingTypeEntries(FUNDING_TYPE_VALUES.PROGRAMME),
+      Type: buildFundingTypeEntry(FUNDING_TYPE_VALUES.PROGRAMME),
       ...(parentName
         ? {
             Name: filterEmpty([createTextValueEntry(parentName, 'es')]),
@@ -301,7 +297,7 @@ function mapConvocatoriaToCerif(row) {
   const funding = {
     '@id': toCerifId(ENTITY_TYPE, fundingId),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    Type: buildFundingTypeEntries(buildConvocatoriaType(row)),
+    Type: buildFundingTypeEntry(buildConvocatoriaType(row)),
     Name: filterEmpty([createTextValueEntry(fundingName, 'es')]),
     Identifier: filterEmpty([
       createSchemeValueEntry(IDENTIFIER_SCHEMES.AWARD_NUMBER, row.id),
@@ -314,7 +310,7 @@ function mapConvocatoriaToCerif(row) {
       },
     }],
     OAMandate: {
-      Mandated: false,
+      mandated: false,
     },
   };
 
@@ -419,11 +415,11 @@ function mapToCerif(row) {
   const funding = {
     '@id': toCerifId(ENTITY_TYPE, fundingId),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    Type: buildFundingTypeEntries(fundingType),
+    Type: buildFundingTypeEntry(fundingType),
     Name: filterEmpty([createTextValueEntry(fundingName, 'es')]),
     Funder: funders,
     OAMandate: {
-      Mandated: false,
+      mandated: false,
     },
     RelatedProjects: [toCerifId('Projects', row.id)],
   };
