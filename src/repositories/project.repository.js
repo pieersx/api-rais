@@ -8,6 +8,7 @@ import {
   buildDateFilter,
   createSchemeValueEntry,
   createTextValueEntry,
+  normalizeDisplayText,
 } from '../utils/formatters.js';
 import {
   CONCYTEC_PROJECT_STATUS_MAP,
@@ -178,7 +179,7 @@ function buildPersonParticipant(integrante) {
     person.id = toCerifId('Persons', integrante.investigador_id);
   }
   if (fullName) {
-    person.name = fullName;
+    person.name = normalizeDisplayText(fullName);
   }
 
   return {
@@ -228,7 +229,7 @@ function buildConsortium(row) {
         {
           OrgUnit: {
             id: toCerifId('OrgUnits', `G${row.grupo_id}`),
-            name: row.grupo_nombre,
+            name: normalizeDisplayText(row.grupo_nombre),
           },
         },
       ],
@@ -241,7 +242,7 @@ function buildConsortium(row) {
         {
           OrgUnit: {
             id: toCerifId('OrgUnits', `F${row.facultad_id}`),
-            name: row.facultad_nombre,
+            name: normalizeDisplayText(row.facultad_nombre),
           },
         },
       ],
@@ -360,7 +361,7 @@ function mapToCerif(row, integrantes = [], ocde = null, abstract = null, equipme
   }
 
   if (row.linea_nombre) {
-    project.ResearchLine = [row.linea_nombre];
+    project.ResearchLine = [normalizeDisplayText(row.linea_nombre)];
   }
 
   if (team) {

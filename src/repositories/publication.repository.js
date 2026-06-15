@@ -9,6 +9,7 @@ import {
   createSchemeValueEntry,
   createTextValueEntry,
   inferAccessRights,
+  normalizeDisplayText,
   normalizeOrcidToken,
 } from '../utils/formatters.js';
 import {
@@ -352,10 +353,10 @@ function buildPersonFromAuthor(author) {
 
   if (!fullName) return null;
 
-  const familyNames = [author.apellido1, author.apellido2].filter(Boolean).join(' ').trim();
-  const firstNames = (author.nombres || '').trim();
+  const familyNames = normalizeDisplayText([author.apellido1, author.apellido2].filter(Boolean).join(' ').trim());
+  const firstNames = normalizeDisplayText(author.nombres);
 
-  const personName = { FullName: fullName };
+  const personName = { FullName: normalizeDisplayText(fullName) };
   if (familyNames) personName.FamilyNames = familyNames;
   if (firstNames) personName.FirstNames = firstNames;
 
@@ -414,7 +415,7 @@ function buildAuthorEntry(author) {
     const affiliation = {
       OrgUnit: {
         id: toCerifId('OrgUnits', `F${author.facultad_id}`),
-        name: author.facultad_nombre,
+        name: normalizeDisplayText(author.facultad_nombre),
       },
     };
 
@@ -435,7 +436,7 @@ function buildEditorEntryFromName(name) {
   return {
     Person: {
       PersonName: {
-        FullName: fullName,
+        FullName: normalizeDisplayText(fullName),
       },
     },
   };

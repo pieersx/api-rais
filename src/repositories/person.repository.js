@@ -10,6 +10,7 @@ import {
   buildDateFilter,
   createSchemeValueEntry,
   createTextValueEntry,
+  normalizeDisplayText,
   normalizeOrcidToken,
 } from '../utils/formatters.js';
 import {
@@ -194,7 +195,7 @@ function mapToCerif(row, affiliation = null) {
   const documentType = String(row.doc_tipo || '').trim().toUpperCase();
   const fullName = formatFullName(row.nombres, row.apellido1, row.apellido2) || null;
   const familyNames = formatFamilyNames(row.apellido1, row.apellido2) || null;
-  const firstNames = String(row.nombres || '').trim() || null;
+  const firstNames = normalizeDisplayText(row.nombres);
   const orcid = normalizeOrcid(row.codigo_orcid);
 
   const identifiers = filterEmpty([
@@ -228,7 +229,7 @@ function mapToCerif(row, affiliation = null) {
     affiliations.push({
       OrgUnit: {
         id: toCerifId('OrgUnits', `F${affiliation.id}`),
-        name: affiliation.nombre,
+        name: normalizeDisplayText(affiliation.nombre),
       },
     });
   }
@@ -237,7 +238,7 @@ function mapToCerif(row, affiliation = null) {
     affiliations.push({
       OrgUnit: {
         id: toCerifId('OrgUnits', `I${affiliation.instituto_id}`),
-        name: affiliation.instituto_nombre,
+        name: normalizeDisplayText(affiliation.instituto_nombre),
       },
     });
   }

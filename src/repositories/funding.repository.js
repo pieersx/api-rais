@@ -8,6 +8,7 @@ import {
   buildDateFilter,
   createSchemeValueEntry,
   createTextValueEntry,
+  normalizeDisplayText,
 } from '../utils/formatters.js';
 import {
   FUNDING_TYPE_VALUES,
@@ -383,7 +384,7 @@ function buildFunders(row) {
   if (row.external_funder_name) {
     funders.push({
       OrgUnit: {
-        name: row.external_funder_name,
+        name: normalizeDisplayText(row.external_funder_name),
       },
     });
   }

@@ -7,6 +7,7 @@ import {
   createTextValueEntry,
   filterEmpty,
   inferIPCClassification,
+  normalizeDisplayText,
   normalizeOrcidToken,
   toCerifId,
   toISO8601,
@@ -93,7 +94,7 @@ function mapToCerif(row, inventors = [], holders = []) {
 
         const person = {
           PersonName: {
-            FullName: fullName,
+            FullName: normalizeDisplayText(fullName),
           },
         }
 

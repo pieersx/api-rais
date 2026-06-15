@@ -71,6 +71,162 @@ export function toCerifId(entityType, id) {
   return `${entityType}/${id}`;
 }
 
+const DISPLAY_LOWERCASE_WORDS = new Set([
+  'a',
+  'al',
+  'ante',
+  'bajo',
+  'con',
+  'contra',
+  'de',
+  'del',
+  'desde',
+  'durante',
+  'e',
+  'el',
+  'en',
+  'entre',
+  'hacia',
+  'hasta',
+  'la',
+  'las',
+  'los',
+  'o',
+  'para',
+  'por',
+  'segun',
+  'según',
+  'sin',
+  'sobre',
+  'tras',
+  'u',
+  'y',
+]);
+
+const DISPLAY_ACRONYMS = new Set([
+  'ADN',
+  'ARN',
+  'CTI',
+  'I+D',
+  'I+D+I',
+  'INDECOPI',
+  'OCDE',
+  'PCR',
+  'RENACYT',
+  'RENATI',
+  'SUNEDU',
+  'UNMSM',
+  'VRI',
+]);
+
+const DISPLAY_ACCENT_WORDS = new Map([
+  ['academica', 'académica'],
+  ['academico', 'académico'],
+  ['administracion', 'administración'],
+  ['alarcon', 'alarcón'],
+  ['analisis', 'análisis'],
+  ['antropologia', 'antropología'],
+  ['aplicacion', 'aplicación'],
+  ['biologia', 'biología'],
+  ['bioquimica', 'bioquímica'],
+  ['clinica', 'clínica'],
+  ['clinico', 'clínico'],
+  ['comunicacion', 'comunicación'],
+  ['desarrollo', 'desarrollo'],
+  ['educacion', 'educación'],
+  ['electronica', 'electrónica'],
+  ['farmaceutica', 'farmacéutica'],
+  ['farmaceutico', 'farmacéutico'],
+  ['fisica', 'física'],
+  ['genetica', 'genética'],
+  ['gestion', 'gestión'],
+  ['historica', 'histórica'],
+  ['historico', 'histórico'],
+  ['innovacion', 'innovación'],
+  ['investigacion', 'investigación'],
+  ['matematica', 'matemática'],
+  ['matematicas', 'matemáticas'],
+  ['medica', 'médica'],
+  ['medico', 'médico'],
+  ['metodologia', 'metodología'],
+  ['nanotecnologia', 'nanotecnología'],
+  ['nutricion', 'nutrición'],
+  ['odontologia', 'odontología'],
+  ['politica', 'política'],
+  ['politicas', 'políticas'],
+  ['produccion', 'producción'],
+  ['quimica', 'química'],
+  ['quimico', 'químico'],
+  ['salud', 'salud'],
+  ['sanchez', 'sánchez'],
+  ['tecnica', 'técnica'],
+  ['tecnico', 'técnico'],
+  ['tecnologia', 'tecnología'],
+  ['tecnologica', 'tecnológica'],
+  ['tecnologico', 'tecnológico'],
+  ['veterinaria', 'veterinaria'],
+]);
+
+function hasOnlyUppercaseLetters(value) {
+  const letters = String(value).match(/\p{Letter}/gu) || [];
+  if (letters.length < 2) return false;
+  return letters.every(letter => letter === letter.toLocaleUpperCase('es-PE'));
+}
+
+function normalizeDisplayToken(token, index) {
+  if (!token) return token;
+
+  const upper = token.toLocaleUpperCase('es-PE');
+  const lower = token.toLocaleLowerCase('es-PE');
+
+  if (DISPLAY_ACRONYMS.has(upper) || /[0-9+&]/.test(token)) {
+    return upper;
+  }
+
+  const accentWord = DISPLAY_ACCENT_WORDS.get(lower) || lower;
+  if (index > 0 && DISPLAY_LOWERCASE_WORDS.has(lower)) {
+    return accentWord;
+  }
+
+  return accentWord.charAt(0).toLocaleUpperCase('es-PE') + accentWord.slice(1);
+}
+
+function normalizeDisplayWord(word, index) {
+  return String(word)
+    .split(/([-./])/)
+    .map((part, partIndex) => {
+      if (/^[-./]$/.test(part)) return part;
+      if (!part) return part;
+      return normalizeDisplayToken(part, index + partIndex);
+    })
+    .join('');
+}
+
+/**
+ * Normaliza nombres/titulos que vienen completamente en mayusculas.
+ * Si el texto ya usa altas y bajas, lo conserva tal como viene de la fuente.
+ * @param {string} value
+ * @returns {string|null}
+ */
+export function normalizeDisplayText(value) {
+  if (!value) return null;
+
+  const normalized = String(value).trim().replace(/\s+/g, ' ');
+  if (!normalized) return null;
+
+  if (!hasOnlyUppercaseLetters(normalized)) {
+    return normalized;
+  }
+
+  return normalized
+    .split(/(\s+)/)
+    .map((part, index) => {
+      if (/^\s+$/.test(part)) return part;
+      return normalizeDisplayWord(part, index);
+    })
+    .join('');
+}
+
 /**
  * Formatea un nombre completo desde componentes
  * @param {string} nombres
@@ -80,7 +236,7 @@ export function toCerifId(entityType, id) {
  */
 export function formatFullName(nombres, apellido1, apellido2) {
   const parts = [nombres, apellido1, apellido2].filter(Boolean);
-  return parts.join(' ').trim();
+  return normalizeDisplayText(parts.join(' ').trim());
 }
 
 /**
@@ -91,7 +247,7 @@ export function formatFullName(nombres, apellido1, apellido2) {
  */
 export function formatFamilyNames(apellido1, apellido2) {
   const parts = [apellido1, apellido2].filter(Boolean);
-  return parts.join(' ').trim();
+  return normalizeDisplayText(parts.join(' ').trim());
 }
 
 /**
@@ -202,7 +358,7 @@ export function createSchemeValueEntry(scheme, value) {
 export function createTextValueEntry(value, lang = null) {
   if (!value) return null;
 
-  const normalized = String(value).trim();
+  const normalized = normalizeDisplayText(value);
   if (!normalized) return null;
 
   const entry = {

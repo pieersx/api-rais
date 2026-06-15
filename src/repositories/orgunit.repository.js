@@ -8,6 +8,7 @@ import {
   buildDateFilter,
   createSchemeValueEntry,
   createTextValueEntry,
+  normalizeDisplayText,
 } from '../utils/formatters.js';
 import {
   NAMESPACES,
@@ -104,7 +105,7 @@ function buildPartOf(orgUnitId, orgUnitName) {
   };
 
   if (orgUnitName) {
-    partOf.OrgUnit.name = orgUnitName;
+    partOf.OrgUnit.name = normalizeDisplayText(orgUnitName);
   }
 
   return partOf;

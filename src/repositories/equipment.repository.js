@@ -8,6 +8,7 @@ import {
   buildDateFilter,
   createSchemeValueEntry,
   createTextValueEntry,
+  normalizeDisplayText,
 } from '../utils/formatters.js';
 import {
   EQUIPMENT_TYPE_KEYWORDS,
@@ -70,7 +71,7 @@ function buildOwner(row) {
     };
 
     if (ownerGroupName) {
-      owner.OrgUnit.name = ownerGroupName;
+      owner.OrgUnit.name = normalizeDisplayText(ownerGroupName);
     }
 
     return owner;
