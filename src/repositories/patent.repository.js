@@ -14,7 +14,7 @@ import {
   toOAIIdentifier,
 } from '../utils/formatters.js'
 
-const ENTITY_TYPE = 'Patents'
+const ENTITY_TYPE = "Patents"
 const PATENT_ELIGIBILITY_SQL = `
   p.estado = 1
   AND TRIM(COALESCE(p.nro_registro, '')) <> ''
