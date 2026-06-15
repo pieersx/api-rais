@@ -227,6 +227,40 @@ export function normalizeDisplayText(value) {
     .join('');
 }
 
+const PROJECT_ID_PREFIX = 'UNMSM-';
+
+export function formatProjectInternalId(id) {
+  const normalized = String(id ?? '').trim();
+  if (!normalized) return null;
+
+  if (normalized.startsWith(PROJECT_ID_PREFIX)) {
+    return normalized;
+  }
+
+  return `${PROJECT_ID_PREFIX}${normalized}`;
+}
+
+export function parseProjectInternalId(id) {
+  const normalized = String(id ?? '').trim();
+  if (!normalized) return null;
+
+  if (normalized.startsWith(PROJECT_ID_PREFIX)) {
+    return normalized.slice(PROJECT_ID_PREFIX.length) || null;
+  }
+
+  return normalized;
+}
+
+export function toProjectCerifId(id) {
+  const projectId = formatProjectInternalId(id);
+  return projectId ? toCerifId('Projects', projectId) : null;
+}
+
+export function toProjectOAIIdentifier(id) {
+  const projectId = formatProjectInternalId(id);
+  return projectId ? toOAIIdentifier('Projects', projectId) : null;
+}
+
 /**
  * Formatea un nombre completo desde componentes
  * @param {string} nombres

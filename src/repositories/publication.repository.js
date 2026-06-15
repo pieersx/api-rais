@@ -11,6 +11,7 @@ import {
   inferAccessRights,
   normalizeDisplayText,
   normalizeOrcidToken,
+  toProjectCerifId,
 } from '../utils/formatters.js';
 import {
   PUBLICATION_TYPE_MAP,
@@ -685,7 +686,7 @@ function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes 
     for (const origin of origins) {
       publication.OriginatesFrom.push({
         Project: {
-          id: toCerifId('Projects', origin.projectId),
+          id: toProjectCerifId(origin.projectId),
           ...(origin.projectName
             ? {
                 Name: filterEmpty([createTextValueEntry(origin.projectName, 'es')]),

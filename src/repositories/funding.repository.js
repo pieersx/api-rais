@@ -9,6 +9,7 @@ import {
   createSchemeValueEntry,
   createTextValueEntry,
   normalizeDisplayText,
+  toProjectCerifId,
 } from '../utils/formatters.js';
 import {
   FUNDING_TYPE_VALUES,
@@ -422,7 +423,7 @@ function mapToCerif(row) {
     OAMandate: {
       mandated: false,
     },
-    RelatedProjects: [toCerifId('Projects', row.id)],
+    RelatedProjects: [toProjectCerifId(row.id)],
   };
 
   if (lastModified) {

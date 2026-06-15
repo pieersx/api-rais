@@ -1,14 +1,17 @@
 import pool from '../config/database.js';
 import { env } from '../config/env.js';
 import {
-  toOAIIdentifier,
   toCerifId,
   toISO8601,
   filterEmpty,
   buildDateFilter,
   createSchemeValueEntry,
   createTextValueEntry,
+  formatProjectInternalId,
   normalizeDisplayText,
+  parseProjectInternalId,
+  toProjectCerifId,
+  toProjectOAIIdentifier,
 } from '../utils/formatters.js';
 import {
   CONCYTEC_PROJECT_STATUS_MAP,
@@ -296,7 +299,7 @@ function mapToCerif(row, integrantes = [], ocde = null, abstract = null, equipme
   const funded = buildFunded(row);
 
   const project = {
-    '@id': toCerifId(ENTITY_TYPE, row.id),
+    '@id': toProjectCerifId(row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Consortium: consortium,
     OAMandate: {
@@ -312,9 +315,9 @@ function mapToCerif(row, integrantes = [], ocde = null, abstract = null, equipme
     project.LastModified = lastModified;
   }
 
-  if (row.codigo_proyecto) {
+  if (row.id) {
     project.Identifier = filterEmpty([
-      createSchemeValueEntry(IDENTIFIER_SCHEMES.PROJECT_REFERENCE, row.codigo_proyecto),
+      createSchemeValueEntry(IDENTIFIER_SCHEMES.PROJECT_REFERENCE, formatProjectInternalId(row.id)),
     ]);
   }
 
@@ -532,7 +535,7 @@ export async function getProjects({ from, until, offset = 0, limit = env.PAGE_SI
 
     results.push({
       header: {
-        identifier: toOAIIdentifier(ENTITY_TYPE, projectRow.id),
+        identifier: toProjectOAIIdentifier(projectRow.id),
         datestamp: toISO8601(projectRow.updated_at),
         setSpec: 'projects',
       },
@@ -581,7 +584,7 @@ export async function getProjectHeaders({ from, until, offset = 0, limit = env.P
   const [rows] = await pool.query(query, [...dateFilter.params, limit, offset]);
 
   return rows.map(row => ({
-    identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
+    identifier: toProjectOAIIdentifier(row.id),
     datestamp: toISO8601(row.updated_at),
     setSpec: 'projects',
   }));
@@ -593,6 +596,11 @@ export async function getProjectHeaders({ from, until, offset = 0, limit = env.P
  * @returns {Promise<object|null>}
  */
 export async function getProjectById(id) {
+  const projectId = parseProjectInternalId(id);
+  if (!projectId) {
+    return null;
+  }
+
   const [rows] = await pool.query(
     `
       SELECT
@@ -636,7 +644,7 @@ export async function getProjectById(id) {
         AND p.estado >= 1
         AND ${STRICT_PROJECT_ELIGIBILITY}
     `,
-    [id]
+    [projectId]
   );
 
   if (rows.length === 0) {
@@ -653,7 +661,7 @@ export async function getProjectById(id) {
 
   return {
     header: {
-      identifier: toOAIIdentifier(ENTITY_TYPE, projectRow.id),
+      identifier: toProjectOAIIdentifier(projectRow.id),
       datestamp: toISO8601(projectRow.updated_at),
       setSpec: 'projects',
     },
