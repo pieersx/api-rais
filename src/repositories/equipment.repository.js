@@ -9,6 +9,10 @@ import {
   createSchemeValueEntry,
   createTextValueEntry,
   normalizeDisplayText,
+  formatEquipmentInternalId,
+  parseEquipmentInternalId,
+  toEquipmentCerifId,
+  toEquipmentOAIIdentifier,
 } from '../utils/formatters.js';
 import {
   EQUIPMENT_TYPE_KEYWORDS,
@@ -86,7 +90,7 @@ function buildOwner(row) {
 }
 
 function mapToCerif(row) {
-  const equipmentId = toCerifId(ENTITY_TYPE, row.id);
+  const equipmentId = toEquipmentCerifId(row.id);
   const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
   const codigo = normalizeText(row.codigo);
   const nombre = normalizeText(row.nombre);
@@ -103,7 +107,7 @@ function mapToCerif(row) {
   };
 
   const identifiers = filterEmpty([
-    createSchemeValueEntry(IDENTIFIER_SCHEMES.CRIS_ID, codigo || row.id),
+    createSchemeValueEntry(IDENTIFIER_SCHEMES.CRIS_ID, formatEquipmentInternalId(row.id)),
   ]);
   if (identifiers.length > 0) {
     equipment.Identifier = identifiers;
@@ -197,7 +201,7 @@ export async function getEquipment({ from, until, offset = 0, limit = env.PAGE_S
 
   return rows.map(row => ({
     header: {
-      identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
+      identifier: toEquipmentOAIIdentifier(row.id),
       datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
       setSpec: 'equipments',
     },
@@ -230,7 +234,7 @@ export async function getEquipmentHeaders({ from, until, offset = 0, limit = env
   const [rows] = await pool.query(query, [...dateFilter.params, limit, offset]);
 
   return rows.map(row => ({
-    identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
+    identifier: toEquipmentOAIIdentifier(row.id),
     datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
     setSpec: 'equipments',
   }));
@@ -242,6 +246,9 @@ export async function getEquipmentHeaders({ from, until, offset = 0, limit = env
  * @returns {Promise<object|null>}
  */
 export async function getEquipmentById(id) {
+  const equipmentId = parseEquipmentInternalId(id);
+  if (!equipmentId) return null;
+
   const [rows] = await pool.query(
     `
       SELECT
@@ -263,7 +270,7 @@ export async function getEquipmentById(id) {
       WHERE gi.id = ?
         AND LOWER(TRIM(gi.categoria)) = 'equipo'
     `,
-    [id]
+    [equipmentId]
   );
 
   if (rows.length === 0) {
@@ -274,7 +281,7 @@ export async function getEquipmentById(id) {
 
   return {
     header: {
-      identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
+      identifier: toEquipmentOAIIdentifier(row.id),
       datestamp: toISO8601(row.updated_at) || FALLBACK_DATE,
       setSpec: 'equipments',
     },

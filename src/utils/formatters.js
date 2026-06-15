@@ -261,6 +261,40 @@ export function toProjectOAIIdentifier(id) {
   return projectId ? toOAIIdentifier('Projects', projectId) : null;
 }
 
+const EQUIPMENT_ID_PREFIX = 'UNMSM-';
+
+export function formatEquipmentInternalId(id) {
+  const normalized = String(id ?? '').trim();
+  if (!normalized) return null;
+
+  if (normalized.startsWith(EQUIPMENT_ID_PREFIX)) {
+    return normalized;
+  }
+
+  return `${EQUIPMENT_ID_PREFIX}${normalized}`;
+}
+
+export function parseEquipmentInternalId(id) {
+  const normalized = String(id ?? '').trim();
+  if (!normalized) return null;
+
+  if (normalized.startsWith(EQUIPMENT_ID_PREFIX)) {
+    return normalized.slice(EQUIPMENT_ID_PREFIX.length) || null;
+  }
+
+  return normalized;
+}
+
+export function toEquipmentCerifId(id) {
+  const equipmentId = formatEquipmentInternalId(id);
+  return equipmentId ? toCerifId('Equipments', equipmentId) : null;
+}
+
+export function toEquipmentOAIIdentifier(id) {
+  const equipmentId = formatEquipmentInternalId(id);
+  return equipmentId ? toOAIIdentifier('Equipments', equipmentId) : null;
+}
+
 /**
  * Formatea un nombre completo desde componentes
  * @param {string} nombres

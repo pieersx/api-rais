@@ -10,6 +10,7 @@ import {
   formatProjectInternalId,
   normalizeDisplayText,
   parseProjectInternalId,
+  toEquipmentCerifId,
   toProjectCerifId,
   toProjectOAIIdentifier,
 } from '../utils/formatters.js';
@@ -427,7 +428,7 @@ async function getProjectEquipments(groupId) {
     [groupId]
   );
 
-  return rows.map(row => toCerifId('Equipments', row.id));
+  return rows.map(row => toEquipmentCerifId(row.id));
 }
 
 /**
