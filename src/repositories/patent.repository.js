@@ -9,9 +9,10 @@ import {
   inferIPCClassification,
   normalizeDisplayText,
   normalizeOrcidToken,
-  toCerifId,
+  parseInstitutionInternalId,
+  toInstitutionCerifId,
+  toInstitutionOAIIdentifier,
   toISO8601,
-  toOAIIdentifier,
 } from '../utils/formatters.js'
 
 const ENTITY_TYPE = 'Patents'
@@ -28,7 +29,7 @@ function normalizeOrcid(orcid) {
 
 function buildPatentHeader(row) {
   const header = {
-    identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
+    identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, row.id),
     setSpec: 'patents',
   }
 
@@ -56,7 +57,7 @@ function mapToCerif(row, inventors = [], holders = []) {
   const abstractParts = []
 
   const patent = {
-    '@id': toCerifId(ENTITY_TYPE, row.id),
+    '@id': toInstitutionCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Type: typeUri,
     Subject: [
@@ -99,7 +100,7 @@ function mapToCerif(row, inventors = [], holders = []) {
         }
 
         if (inventor.investigador_id) {
-          person.id = toCerifId('Persons', inventor.investigador_id)
+          person.id = toInstitutionCerifId('Persons', inventor.investigador_id)
         }
 
         const identifiers = []
@@ -337,6 +338,9 @@ export async function getPatentHeaders({
  * @returns {Promise<object|null>}
  */
 export async function getPatentById(id) {
+  const patentId = parseInstitutionInternalId(id)
+  if (!patentId) return null
+
   const [rows] = await pool.query(
     `
       SELECT p.*
@@ -344,7 +348,7 @@ export async function getPatentById(id) {
       WHERE p.id = ?
         AND ${PATENT_ELIGIBILITY_SQL}
     `,
-    [id]
+    [patentId]
   )
 
   if (rows.length === 0) {

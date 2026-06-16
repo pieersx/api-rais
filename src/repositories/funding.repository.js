@@ -1,8 +1,10 @@
 import pool from '../config/database.js';
 import { env } from '../config/env.js';
 import {
-  toOAIIdentifier,
-  toCerifId,
+  formatInstitutionInternalId,
+  parseInstitutionInternalId,
+  toInstitutionCerifId,
+  toInstitutionOAIIdentifier,
   toISO8601,
   filterEmpty,
   buildDateFilter,
@@ -22,7 +24,7 @@ const ENTITY_TYPE = 'Fundings';
 const PROJECT_FUNDING_PREFIX = 'P';
 const CONVOCATORIA_FUNDING_PREFIX = 'C';
 const ROOT_ORGUNIT = {
-  id: toCerifId('OrgUnits', '1'),
+  id: toInstitutionCerifId('OrgUnits', '1'),
   acronym: 'UNMSM',
   name: 'Universidad Nacional Mayor de San Marcos',
 };
@@ -81,9 +83,11 @@ function parseFundingProjectId(id) {
 function parseFundingInternalId(id) {
   const value = String(id || '').trim();
   if (!value) return null;
+  const internalId = parseInstitutionInternalId(value);
+  if (!internalId) return null;
 
-  if (value.startsWith(CONVOCATORIA_FUNDING_PREFIX)) {
-    const normalized = value.slice(1);
+  if (internalId.startsWith(CONVOCATORIA_FUNDING_PREFIX)) {
+    const normalized = internalId.slice(1);
     if (!/^\d+$/.test(normalized)) return null;
     return {
       kind: 'convocatoria',
@@ -91,7 +95,7 @@ function parseFundingInternalId(id) {
     };
   }
 
-  const projectId = parseFundingProjectId(value);
+  const projectId = parseFundingProjectId(internalId);
   if (!projectId) return null;
 
   return {
@@ -231,7 +235,7 @@ function buildParentFunding(row) {
 
   return {
     Funding: {
-      id: toCerifId(ENTITY_TYPE, `${CONVOCATORIA_FUNDING_PREFIX}${convocatoria.id}`),
+      id: toInstitutionCerifId(ENTITY_TYPE, `${CONVOCATORIA_FUNDING_PREFIX}${convocatoria.id}`),
       Type: buildFundingTypeEntry(FUNDING_TYPE_VALUES.CALL),
       ...(name
         ? {
@@ -280,7 +284,7 @@ function buildConvocatoriaParentFunding(row) {
 
   return {
     Funding: {
-      id: toCerifId(ENTITY_TYPE, `${CONVOCATORIA_FUNDING_PREFIX}${row.parent_exportable_id}`),
+      id: toInstitutionCerifId(ENTITY_TYPE, `${CONVOCATORIA_FUNDING_PREFIX}${row.parent_exportable_id}`),
       Type: buildFundingTypeEntry(FUNDING_TYPE_VALUES.PROGRAMME),
       ...(parentName
         ? {
@@ -297,12 +301,12 @@ function mapConvocatoriaToCerif(row) {
   const parentFunding = buildConvocatoriaParentFunding(row);
 
   const funding = {
-    '@id': toCerifId(ENTITY_TYPE, fundingId),
+    '@id': toInstitutionCerifId(ENTITY_TYPE, fundingId),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Type: buildFundingTypeEntry(buildConvocatoriaType(row)),
     Name: filterEmpty([createTextValueEntry(fundingName, 'es')]),
     Identifier: filterEmpty([
-      createSchemeValueEntry(IDENTIFIER_SCHEMES.AWARD_NUMBER, row.id),
+      createSchemeValueEntry(IDENTIFIER_SCHEMES.AWARD_NUMBER, formatInstitutionInternalId(fundingId)),
     ]),
     Funder: [{
       OrgUnit: {
@@ -345,7 +349,7 @@ function mapConvocatoriaToCerif(row) {
 function createProjectFundingRecord(row) {
   return {
     header: {
-      identifier: toOAIIdentifier(ENTITY_TYPE, `${PROJECT_FUNDING_PREFIX}${row.id}`),
+      identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, `${PROJECT_FUNDING_PREFIX}${row.id}`),
       datestamp: toISO8601(row.updated_at),
       setSpec: 'fundings',
     },
@@ -358,7 +362,7 @@ function createProjectFundingRecord(row) {
 function createConvocatoriaFundingRecord(row) {
   return {
     header: {
-      identifier: toOAIIdentifier(ENTITY_TYPE, `${CONVOCATORIA_FUNDING_PREFIX}${row.id}`),
+      identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, `${CONVOCATORIA_FUNDING_PREFIX}${row.id}`),
       datestamp: toISO8601(getFundingLastModifiedValue(row)),
       setSpec: 'fundings',
     },
@@ -415,7 +419,7 @@ function mapToCerif(row) {
   const description = buildDescription(row);
 
   const funding = {
-    '@id': toCerifId(ENTITY_TYPE, fundingId),
+    '@id': toInstitutionCerifId(ENTITY_TYPE, fundingId),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Type: buildFundingTypeEntry(fundingType),
     Name: filterEmpty([createTextValueEntry(fundingName, 'es')]),
@@ -432,7 +436,7 @@ function mapToCerif(row) {
 
   if (awardNumber) {
     funding.Identifier = filterEmpty([
-      createSchemeValueEntry(IDENTIFIER_SCHEMES.AWARD_NUMBER, awardNumber),
+      createSchemeValueEntry(IDENTIFIER_SCHEMES.AWARD_NUMBER, formatInstitutionInternalId(fundingId)),
     ]);
   }
 
@@ -831,7 +835,7 @@ export async function getFundingHeaders({ from, until, offset = 0, limit = env.P
   const page = (await getFundingIndex(from, until)).slice(offset, offset + limit);
 
   return page.map(row => ({
-    identifier: toOAIIdentifier(
+    identifier: toInstitutionOAIIdentifier(
       ENTITY_TYPE,
       `${row.kind === 'project' ? PROJECT_FUNDING_PREFIX : CONVOCATORIA_FUNDING_PREFIX}${row.id}`
     ),

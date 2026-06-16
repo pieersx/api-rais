@@ -1,7 +1,7 @@
 import pool from '../config/database.js';
 import { env } from '../config/env.js';
 import {
-  toCerifId,
+  toInstitutionCerifId,
   toISO8601,
   filterEmpty,
   buildDateFilter,
@@ -26,7 +26,7 @@ import {
 
 const ENTITY_TYPE = 'Projects';
 const ROOT_ORGUNIT = {
-  id: toCerifId('OrgUnits', '1'),
+  id: toInstitutionCerifId('OrgUnits', '1'),
   name: 'Universidad Nacional Mayor de San Marcos',
 };
 const EXTERNAL_FUNDING_TOTAL = `
@@ -180,7 +180,7 @@ function buildPersonParticipant(integrante) {
 
   const person = {};
   if (integrante.investigador_id) {
-    person.id = toCerifId('Persons', integrante.investigador_id);
+    person.id = toInstitutionCerifId('Persons', integrante.investigador_id);
   }
   if (fullName) {
     person.name = normalizeDisplayText(fullName);
@@ -232,7 +232,7 @@ function buildConsortium(row) {
       Contractor: [
         {
           OrgUnit: {
-            id: toCerifId('OrgUnits', `G${row.grupo_id}`),
+            id: toInstitutionCerifId('OrgUnits', `G${row.grupo_id}`),
             name: normalizeDisplayText(row.grupo_nombre),
           },
         },
@@ -245,7 +245,7 @@ function buildConsortium(row) {
       Contractor: [
         {
           OrgUnit: {
-            id: toCerifId('OrgUnits', `F${row.facultad_id}`),
+            id: toInstitutionCerifId('OrgUnits', `F${row.facultad_id}`),
             name: normalizeDisplayText(row.facultad_nombre),
           },
         },
@@ -279,7 +279,7 @@ function buildFunded(row) {
     By: by,
     As: {
       Funding: {
-        id: toCerifId('Fundings', `P${row.id}`),
+        id: toInstitutionCerifId('Fundings', `P${row.id}`),
         ...(normalizeHumanText(row.titulo || row.codigo_proyecto)
           ? {
               Name: filterEmpty([
