@@ -30,7 +30,7 @@ import {
 const ENTITY_TYPE = 'Projects';
 const ROOT_ORGUNIT = {
   id: toInstitutionCerifId('OrgUnits', '1'),
-  name: 'Universidad Nacional Mayor de San Marcos',
+  Name: 'Universidad Nacional Mayor de San Marcos',
 };
 const EQUIPMENT_EXCLUSION_REGEXP = 'mesa|estante|mouse|teclado|keyboard|parlante|webcam|monitor|proyector|router|televisor|tel[eé]fono|aire acondicionado|tablet|laptop|computadora port[aá]til|computadora personal|microcomputadora|modulo de computadora|m[oó]dulo de computadora|impresora laser|impresora multifuncional|copiadora|scanner|fax|ups';
 const EQUIPMENT_PRESERVE_REGEXP = 'impresora 3d|servidor|workstation|think station|alto desempe[nñ]o|cluster|gpu';
@@ -181,7 +181,7 @@ function buildAffiliation(integrante) {
     affiliations.push({
       OrgUnit: {
         id: toInstitutionCerifId('OrgUnits', `F${integrante.facultad_id}`),
-        name: normalizeDisplayText(integrante.facultad_nombre),
+        Name: normalizeDisplayText(integrante.facultad_nombre), 
       },
     });
   }
@@ -201,10 +201,16 @@ function buildPersonParticipant(integrante) {
   if (integrante.investigador_id) {
     person.id = toInstitutionCerifId('Persons', integrante.investigador_id);
   }
+  
+  
   const personName = {};
-  if (fullName) personName.FullName = fullName;
-  if (familyNames) personName.FamilyNames = familyNames;
-  if (firstNames) personName.FirstNames = firstNames;
+  if (familyNames && firstNames) {
+    personName.FamilyNames = familyNames;
+    personName.FirstNames = firstNames;
+  } else if (fullName) {
+    personName.FullName = fullName;
+  }
+  
   if (Object.keys(personName).length > 0) {
     person.PersonName = personName;
   }
@@ -263,7 +269,7 @@ function buildConsortium(row) {
         {
           OrgUnit: {
             id: toInstitutionCerifId('OrgUnits', `G${row.grupo_id}`),
-            name: normalizeDisplayText(row.grupo_nombre),
+            Name: normalizeDisplayText(row.grupo_nombre),
           },
         },
       ],
@@ -276,7 +282,7 @@ function buildConsortium(row) {
         {
           OrgUnit: {
             id: toInstitutionCerifId('OrgUnits', `F${row.facultad_id}`),
-            name: normalizeDisplayText(row.facultad_nombre),
+            Name: normalizeDisplayText(row.facultad_nombre),
           },
         },
       ],
@@ -298,7 +304,7 @@ function buildFunded(row) {
   const by = row.is_external_project
     ? {
         OrgUnit: {
-          name: row.external_funder_name,
+          Name: row.external_funder_name,
         },
       }
     : {
