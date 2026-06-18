@@ -1,12 +1,11 @@
 import pool from '../config/database.js'
 import { env } from '../config/env.js'
-import { NAMESPACES, PATENT_TYPE_MAP } from '../utils/constants.js'
+import { NAMESPACES, PATENT_TYPE_MAP, VOCABULARIES } from '../utils/constants.js'
 import {
   buildDateFilter,
   createSchemeValueEntry,
   createTextValueEntry,
   filterEmpty,
-  inferIPCClassification,
   normalizeDisplayText,
   normalizeOrcidToken,
   parseInstitutionInternalId,
@@ -16,11 +15,13 @@ import {
 } from '../utils/formatters.js'
 
 const ENTITY_TYPE = 'Patents'
+const PATENT_HAS_REAL_IPC_SQL = 'FALSE'
 const PATENT_ELIGIBILITY_SQL = `
   p.estado = 1
   AND TRIM(COALESCE(p.nro_registro, '')) <> ''
   AND TRIM(COALESCE(p.titulo, '')) <> ''
   AND p.updated_at IS NOT NULL
+  AND ${PATENT_HAS_REAL_IPC_SQL}
 `
 
 function normalizeOrcid(orcid) {
@@ -50,22 +51,18 @@ function normalizeAbstractPart(value) {
 
 function mapToCerif(row, inventors = [], holders = []) {
   const typeUri = PATENT_TYPE_MAP[row.tipo] || PATENT_TYPE_MAP.default
-  const ipcClassification = inferIPCClassification(row)
   const lastModified = toISO8601(row.updated_at)
-  const title = filterEmpty([createTextValueEntry(row.titulo, 'es')])
+  const title = filterEmpty([createTextValueEntry(normalizeDisplayText(row.titulo), 'es')])
   const patentNumber = String(row.nro_registro || '').trim()
   const abstractParts = []
 
   const patent = {
     '@id': toInstitutionCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    Type: typeUri,
-    Subject: [
-      {
-        Scheme: ipcClassification.scheme,
-        Value: ipcClassification.value,
-      },
-    ],
+    Type: {
+      Scheme: VOCABULARIES.COAR_PATENT_TYPES,
+      Value: typeUri,
+    },
     CountryCode: 'PE',
   }
 

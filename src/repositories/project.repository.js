@@ -7,8 +7,11 @@ import {
   buildDateFilter,
   createSchemeValueEntry,
   createTextValueEntry,
+  formatFamilyNames,
+  formatFullName,
   formatProjectInternalId,
   normalizeDisplayText,
+  normalizeOrcidToken,
   parseProjectInternalId,
   toEquipmentCerifId,
   toProjectCerifId,
@@ -29,6 +32,8 @@ const ROOT_ORGUNIT = {
   id: toInstitutionCerifId('OrgUnits', '1'),
   name: 'Universidad Nacional Mayor de San Marcos',
 };
+const EQUIPMENT_EXCLUSION_REGEXP = 'mesa|estante|mouse|teclado|keyboard|parlante|webcam|monitor|proyector|router|televisor|tel[eé]fono|aire acondicionado|tablet|laptop|computadora port[aá]til|computadora personal|microcomputadora|modulo de computadora|m[oó]dulo de computadora|impresora laser|impresora multifuncional|copiadora|scanner|fax|ups';
+const EQUIPMENT_PRESERVE_REGEXP = 'impresora 3d|servidor|workstation|think station|alto desempe[nñ]o|cluster|gpu';
 const EXTERNAL_FUNDING_TOTAL = `
   (
     COALESCE(p.aporte_no_unmsm, 0)
@@ -169,11 +174,25 @@ function getMemberOccupationType(role) {
   return `${VOCABULARIES.OCDE_OCCUPATION_TYPES}#investigadorOInnovadorMiembro`;
 }
 
+function buildAffiliation(integrante) {
+  const affiliations = [];
+
+  if (integrante.facultad_id && integrante.facultad_nombre) {
+    affiliations.push({
+      OrgUnit: {
+        id: toInstitutionCerifId('OrgUnits', `F${integrante.facultad_id}`),
+        name: normalizeDisplayText(integrante.facultad_nombre),
+      },
+    });
+  }
+
+  return affiliations;
+}
+
 function buildPersonParticipant(integrante) {
-  const fullName = [integrante.nombres, integrante.apellido1, integrante.apellido2]
-    .filter(Boolean)
-    .join(' ')
-    .trim();
+  const fullName = formatFullName(integrante.nombres, integrante.apellido1, integrante.apellido2);
+  const familyNames = formatFamilyNames(integrante.apellido1, integrante.apellido2);
+  const firstNames = normalizeDisplayText(integrante.nombres);
   const role = buildParticipantRole(integrante);
 
   if (!role || (!integrante.investigador_id && !fullName)) return null;
@@ -182,8 +201,22 @@ function buildPersonParticipant(integrante) {
   if (integrante.investigador_id) {
     person.id = toInstitutionCerifId('Persons', integrante.investigador_id);
   }
-  if (fullName) {
-    person.name = normalizeDisplayText(fullName);
+  const personName = {};
+  if (fullName) personName.FullName = fullName;
+  if (familyNames) personName.FamilyNames = familyNames;
+  if (firstNames) personName.FirstNames = firstNames;
+  if (Object.keys(personName).length > 0) {
+    person.PersonName = personName;
+  }
+
+  const orcid = normalizeOrcidToken(integrante.codigo_orcid);
+  if (orcid) {
+    person.ORCID = orcid;
+  }
+
+  const affiliations = buildAffiliation(integrante);
+  if (affiliations.length > 0) {
+    person.Affiliation = affiliations;
   }
 
   return {
@@ -208,11 +241,8 @@ function buildTeam(integrantes) {
     }
 
     members.push({
+      '@type': getMemberOccupationType(participant.role),
       Person: participant.Person,
-      Type: {
-        Scheme: VOCABULARIES.OCDE_OCCUPATION_TYPES,
-        Value: getMemberOccupationType(participant.role),
-      },
     });
   }
 
@@ -293,7 +323,7 @@ function buildFunded(row) {
 }
 
 function mapToCerif(row, integrantes = [], ocde = null, abstract = null, equipments = []) {
-  const titleValue = row.titulo ? String(row.titulo).trim() : '';
+  const titleValue = normalizeDisplayText(row.titulo) || '';
   const lastModified = toISO8601(row.updated_at);
   const team = buildTeam(integrantes);
   const consortium = buildConsortium(row);
@@ -304,7 +334,7 @@ function mapToCerif(row, integrantes = [], ocde = null, abstract = null, equipme
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Consortium: consortium,
     OAMandate: {
-      mandated: false,
+      '@mandated': false,
     },
   };
 
@@ -344,7 +374,7 @@ function mapToCerif(row, integrantes = [], ocde = null, abstract = null, equipme
   }
 
   if (row.palabras_clave) {
-    project.Keywords = row.palabras_clave
+    project.Keyword = row.palabras_clave
       .split(',')
       .map(keyword => keyword.trim())
       .filter(Boolean)
@@ -364,8 +394,15 @@ function mapToCerif(row, integrantes = [], ocde = null, abstract = null, equipme
     }];
   }
 
-  if (row.linea_nombre) {
-    project.ResearchLine = [normalizeDisplayText(row.linea_nombre)];
+  if (row.linea_investigacion_id && row.linea_nombre) {
+    project.ResearchLine = [
+      {
+        OrgUnit: {
+          id: toInstitutionCerifId('OrgUnits', `LI${row.linea_investigacion_id}`),
+          Name: filterEmpty([createTextValueEntry(row.linea_nombre, 'es')]),
+        },
+      },
+    ];
   }
 
   if (team) {
@@ -376,9 +413,10 @@ function mapToCerif(row, integrantes = [], ocde = null, abstract = null, equipme
     project.Funded = funded;
   }
 
-  if (row.localizacion) {
-    project.GeoLocation = [{
-      GeoLocationPlace: row.localizacion,
+  const geoLocationPlace = normalizeProjectGeoLocation(row.localizacion);
+  if (geoLocationPlace) {
+    project.geoLocation = [{
+      geoLocationPlace,
     }];
   }
 
@@ -399,9 +437,13 @@ async function getProjectParticipants(projectId) {
         ui.nombres,
         ui.apellido1,
         ui.apellido2,
+        ui.codigo_orcid,
+        f.id as facultad_id,
+        f.nombre as facultad_nombre,
         pit.nombre as tipo_nombre
       FROM Proyecto_integrante pi
       LEFT JOIN Usuario_investigador ui ON pi.investigador_id = ui.id
+      LEFT JOIN Facultad f ON ui.facultad_id = f.id
       LEFT JOIN Proyecto_integrante_tipo pit ON pi.proyecto_integrante_tipo_id = pit.id
       WHERE pi.proyecto_id = ?
         AND IFNULL(pi.estado, 1) = 1
@@ -413,22 +455,62 @@ async function getProjectParticipants(projectId) {
   return integrantes;
 }
 
+function normalizeProjectGeoLocation(value) {
+  const text = normalizeHumanText(value);
+  if (!text) return null;
+
+  const key = text
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase();
+
+  if (key.includes('otros lugares') || key.includes('otras regiones')) {
+    return null;
+  }
+  if (key.includes('lima metropolitana')) {
+    return 'Lima Metropolitana';
+  }
+  if (key.includes('callao')) {
+    return 'Lima y Callao';
+  }
+  if (key.includes('lima')) {
+    return 'Lima';
+  }
+
+  return text;
+}
+
 async function getProjectEquipments(groupId) {
   if (!groupId) return [];
 
   const [rows] = await pool.query(
     `
-      SELECT gi.id
-    FROM Grupo_infraestructura gi
+      SELECT gi.id, gi.codigo, gi.nombre
+      FROM Grupo_infraestructura gi
       WHERE gi.grupo_id = ?
         AND LOWER(TRIM(gi.categoria)) = 'equipo'
+        AND NOT (
+          LOWER(CONCAT_WS(' ', gi.nombre, gi.descripcion, gi.ubicacion)) REGEXP ?
+          AND LOWER(CONCAT_WS(' ', gi.nombre, gi.descripcion, gi.ubicacion)) NOT REGEXP ?
+        )
       ORDER BY gi.id
       LIMIT 100
     `,
-    [groupId]
+    [groupId, EQUIPMENT_EXCLUSION_REGEXP, EQUIPMENT_PRESERVE_REGEXP]
   );
 
-  return rows.map(row => toEquipmentCerifId(row.id));
+  return rows.map(row => ({
+    Equipment: {
+      id: toEquipmentCerifId(row.id),
+      ...(row.nombre
+        ? { Name: filterEmpty([createTextValueEntry(normalizeDisplayText(row.nombre), 'es')]) }
+        : {}),
+      Identifier: {
+        '@type': IDENTIFIER_SCHEMES.CRIS_ID,
+        Value: formatProjectInternalId(row.id),
+      },
+    },
+  }));
 }
 
 /**

@@ -1,5 +1,5 @@
 import { OAI_DOMAIN } from '../config/env.js';
-import { ACCESS_RIGHTS, LEGACY_SET_ALIASES, PATENT_IPC_BY_KEYWORDS } from './constants.js';
+import { ACCESS_RIGHTS, LEGACY_SET_ALIASES } from './constants.js';
 
 /**
  * Formatea una fecha a ISO 8601 (W3CDTF)
@@ -531,43 +531,4 @@ export function inferAccessRights(row) {
 
   // Por defecto, si no hay identificadores públicos: Metadata Only
   return ACCESS_RIGHTS.METADATA_ONLY;
-}
-
-/**
- * Infiere la clasificacion IPC (CIP) para patentes basado en titulo y tipo
- * @param {object} row - Registro de patente
- * @param {string} row.titulo - Titulo de la patente
- * @param {string} row.tipo - Tipo de patente
- * @returns {{ scheme: string, value: string, note?: string }}
- */
-export function inferIPCClassification(row) {
-  const title = (row.titulo || '').toLowerCase();
-  const type = (row.tipo || '').toLowerCase();
-
-  // Buscar coincidencia con palabras clave (iterando array ordenado)
-  for (const [keywords, ipcCode] of PATENT_IPC_BY_KEYWORDS) {
-    const regex = new RegExp(keywords, 'i');
-    if (regex.test(title)) {
-      return {
-        scheme: 'http://data.epo.org/linked-data/def/ipc/',
-        value: `http://data.epo.org/linked-data/def/ipc/${ipcCode}`,
-      };
-    }
-  }
-
-  // Mapeo por tipo cuando no hay coincidencia en título
-  if (type.includes('modelo de utilidad')) {
-    return {
-      scheme: 'http://data.epo.org/linked-data/def/ipc/',
-      value: 'http://data.epo.org/linked-data/def/ipc/F16H', // Elementos de máquinas
-      note: 'Clasificación inferida por tipo - requiere curación manual',
-    };
-  }
-
-  // Fallback: Clase técnica general
-  return {
-    scheme: 'http://data.epo.org/linked-data/def/ipc/',
-    value: 'http://data.epo.org/linked-data/def/ipc/Y10S', // Clase técnica general
-    note: 'Clasificación genérica - requiere curación manual',
-  };
 }
