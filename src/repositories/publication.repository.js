@@ -1,8 +1,9 @@
 import pool from '../config/database.js';
 import { env } from '../config/env.js';
 import {
-  toOAIIdentifier,
-  toCerifId,
+  parseInstitutionInternalId,
+  toInstitutionCerifId,
+  toInstitutionOAIIdentifier,
   toISO8601,
   filterEmpty,
   buildDateFilter,
@@ -364,7 +365,7 @@ function buildPersonFromAuthor(author) {
   const person = { PersonName: personName };
 
   if (author.investigador_id) {
-    person.id = toCerifId('Persons', author.investigador_id);
+    person.id = toInstitutionCerifId('Persons', author.investigador_id);
   }
 
   const personIdentifiers = filterEmpty([
@@ -415,7 +416,7 @@ function buildAuthorEntry(author) {
   if (author.facultad_id && author.facultad_nombre) {
     const affiliation = {
       OrgUnit: {
-        id: toCerifId('OrgUnits', `F${author.facultad_id}`),
+        id: toInstitutionCerifId('OrgUnits', `F${author.facultad_id}`),
         name: normalizeDisplayText(author.facultad_nombre),
       },
     };
@@ -464,7 +465,7 @@ function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes 
   ]);
 
   const publication = {
-    '@id': toCerifId(ENTITY_TYPE, row.id),
+    '@id': toInstitutionCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Type: typeEntries,
   };
@@ -585,7 +586,7 @@ function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes 
 
   if (SERIAL_PUBLICATION_TYPES.has(row.tipo_publicacion) && (containerTitle || containerIssn.length > 0)) {
     const embeddedPublication = {
-      id: toCerifId('Publications', `SRC-${row.id}`),
+      id: toInstitutionCerifId('Publications', `SRC-${row.id}`),
       Type: JOURNAL_CONTAINER_TYPE,
     };
 
@@ -604,7 +605,7 @@ function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes 
 
   if (row.tipo_publicacion === 'capitulo' && (row.nombre_libro || row.isbn)) {
     const partOfPublication = {
-      id: toCerifId('Publications', `BOOK-${row.id}`),
+      id: toInstitutionCerifId('Publications', `BOOK-${row.id}`),
       Type: BOOK_CONTAINER_TYPE,
     };
 
@@ -697,7 +698,7 @@ function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes 
 
       publication.OriginatesFrom.push({
         Funding: {
-          id: toCerifId('Fundings', `P${origin.projectId}`),
+          id: toInstitutionCerifId('Fundings', `P${origin.projectId}`),
           ...(origin.projectName
             ? {
                 Name: filterEmpty([createTextValueEntry(origin.projectName, 'es')]),
@@ -841,7 +842,7 @@ export async function getPublications({ from, until, offset = 0, limit = env.PAG
 
     results.push({
       header: {
-        identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
+        identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, row.id),
         datestamp: toISO8601(row.updated_at),
         setSpec: 'publications',
       },
@@ -881,7 +882,7 @@ export async function getPublicationHeaders({ from, until, offset = 0, limit = e
   const [rows] = await pool.query(query, [...dateFilter.params, limit, offset]);
 
   return rows.map(row => ({
-    identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
+    identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, row.id),
     datestamp: toISO8601(row.updated_at),
     setSpec: 'publications',
   }));
@@ -893,6 +894,9 @@ export async function getPublicationHeaders({ from, until, offset = 0, limit = e
  * @returns {Promise<object|null>}
  */
 export async function getPublicationById(id) {
+  const publicationId = parseInstitutionInternalId(id);
+  if (!publicationId) return null;
+
   const [rows] = await pool.query(
     `
       SELECT p.*
@@ -904,7 +908,7 @@ export async function getPublicationById(id) {
         AND p.updated_at >= ?
         AND ${STRICT_PUBLICATION_IDENTIFIER_SQL}
     `,
-    [id, MIN_VALID_UPDATED_AT]
+    [publicationId, MIN_VALID_UPDATED_AT]
   );
 
   if (rows.length === 0) {
@@ -916,7 +920,7 @@ export async function getPublicationById(id) {
 
   return {
     header: {
-      identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
+      identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, row.id),
       datestamp: toISO8601(row.updated_at),
       setSpec: 'publications',
     },

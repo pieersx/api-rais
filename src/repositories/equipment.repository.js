@@ -1,8 +1,7 @@
 import pool from '../config/database.js';
 import { env } from '../config/env.js';
 import {
-  toOAIIdentifier,
-  toCerifId,
+  toInstitutionCerifId,
   toISO8601,
   filterEmpty,
   buildDateFilter,
@@ -23,7 +22,7 @@ import {
 
 const ENTITY_TYPE = 'Equipments';
 const FALLBACK_DATE = '2014-01-01T00:00:00Z';
-const ROOT_ORGUNIT_ID = toCerifId('OrgUnits', '1');
+const ROOT_ORGUNIT_ID = toInstitutionCerifId('OrgUnits', '1');
 const ROOT_ORGUNIT_NAME = 'Universidad Nacional Mayor de San Marcos';
 const EQUIPMENT_TYPE_SCHEME = VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES;
 
@@ -70,7 +69,7 @@ function buildOwner(row) {
   if (ownerGroupId) {
     const owner = {
       OrgUnit: {
-        id: toCerifId('OrgUnits', `G${ownerGroupId}`),
+        id: toInstitutionCerifId('OrgUnits', `G${ownerGroupId}`),
       },
     };
 

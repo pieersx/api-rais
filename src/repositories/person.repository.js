@@ -1,8 +1,9 @@
 import pool from '../config/database.js';
 import { env } from '../config/env.js';
 import {
-  toOAIIdentifier,
-  toCerifId,
+  toInstitutionCerifId,
+  toInstitutionOAIIdentifier,
+  parseInstitutionInternalId,
   toISO8601,
   formatFullName,
   formatFamilyNames,
@@ -173,7 +174,7 @@ function buildAffiliationContext(row) {
 
 function buildPersonHeader(row) {
   const header = {
-    identifier: toOAIIdentifier(ENTITY_TYPE, row.id),
+    identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, row.id),
     setSpec: 'persons',
   };
 
@@ -219,7 +220,7 @@ function mapToCerif(row, affiliation = null) {
   const affiliations = [
     {
       OrgUnit: {
-        id: toCerifId('OrgUnits', '1'),
+        id: toInstitutionCerifId('OrgUnits', '1'),
         name: 'Universidad Nacional Mayor de San Marcos',
       },
     },
@@ -228,7 +229,7 @@ function mapToCerif(row, affiliation = null) {
   if (affiliation?.id && affiliation.nombre) {
     affiliations.push({
       OrgUnit: {
-        id: toCerifId('OrgUnits', `F${affiliation.id}`),
+        id: toInstitutionCerifId('OrgUnits', `F${affiliation.id}`),
         name: normalizeDisplayText(affiliation.nombre),
       },
     });
@@ -237,7 +238,7 @@ function mapToCerif(row, affiliation = null) {
   if (affiliation?.instituto_id && affiliation.instituto_nombre) {
     affiliations.push({
       OrgUnit: {
-        id: toCerifId('OrgUnits', `I${affiliation.instituto_id}`),
+        id: toInstitutionCerifId('OrgUnits', `I${affiliation.instituto_id}`),
         name: normalizeDisplayText(affiliation.instituto_nombre),
       },
     });
@@ -255,7 +256,7 @@ function mapToCerif(row, affiliation = null) {
   }
 
   const person = {
-    '@id': toCerifId(ENTITY_TYPE, row.id),
+    '@id': toInstitutionCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     PersonName: personName,
     Gender: GENDER_MAP[row.sexo],
@@ -403,6 +404,9 @@ export async function getPersonHeaders({ from, until, offset = 0, limit = env.PA
  * @returns {Promise<object|null>}
  */
 export async function getPersonById(id) {
+  const personId = parseInstitutionInternalId(id);
+  if (!personId) return null;
+
   const query = `
     SELECT 
       ui.*,
@@ -421,7 +425,7 @@ export async function getPersonById(id) {
       AND ${PERSON_REQUIRED_DATE_FILTER}
   `;
 
-  const [rows] = await pool.query(query, [id]);
+  const [rows] = await pool.query(query, [personId]);
 
   if (rows.length === 0) {
     return null;

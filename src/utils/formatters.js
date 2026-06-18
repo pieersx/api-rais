@@ -71,6 +71,40 @@ export function toCerifId(entityType, id) {
   return `${entityType}/${id}`;
 }
 
+const INSTITUTION_ID_PREFIX = 'UNMSM-';
+
+export function formatInstitutionInternalId(id) {
+  const normalized = String(id ?? '').trim();
+  if (!normalized) return null;
+
+  if (normalized.startsWith(INSTITUTION_ID_PREFIX)) {
+    return normalized;
+  }
+
+  return `${INSTITUTION_ID_PREFIX}${normalized}`;
+}
+
+export function parseInstitutionInternalId(id) {
+  const normalized = String(id ?? '').trim();
+  if (!normalized) return null;
+
+  if (normalized.startsWith(INSTITUTION_ID_PREFIX)) {
+    return normalized.slice(INSTITUTION_ID_PREFIX.length) || null;
+  }
+
+  return normalized;
+}
+
+export function toInstitutionCerifId(entityType, id) {
+  const internalId = formatInstitutionInternalId(id);
+  return internalId ? toCerifId(entityType, internalId) : null;
+}
+
+export function toInstitutionOAIIdentifier(entityType, id) {
+  const internalId = formatInstitutionInternalId(id);
+  return internalId ? toOAIIdentifier(entityType, internalId) : null;
+}
+
 const DISPLAY_LOWERCASE_WORDS = new Set([
   'a',
   'al',
@@ -227,28 +261,12 @@ export function normalizeDisplayText(value) {
     .join('');
 }
 
-const PROJECT_ID_PREFIX = 'UNMSM-';
-
 export function formatProjectInternalId(id) {
-  const normalized = String(id ?? '').trim();
-  if (!normalized) return null;
-
-  if (normalized.startsWith(PROJECT_ID_PREFIX)) {
-    return normalized;
-  }
-
-  return `${PROJECT_ID_PREFIX}${normalized}`;
+  return formatInstitutionInternalId(id);
 }
 
 export function parseProjectInternalId(id) {
-  const normalized = String(id ?? '').trim();
-  if (!normalized) return null;
-
-  if (normalized.startsWith(PROJECT_ID_PREFIX)) {
-    return normalized.slice(PROJECT_ID_PREFIX.length) || null;
-  }
-
-  return normalized;
+  return parseInstitutionInternalId(id);
 }
 
 export function toProjectCerifId(id) {
@@ -261,28 +279,12 @@ export function toProjectOAIIdentifier(id) {
   return projectId ? toOAIIdentifier('Projects', projectId) : null;
 }
 
-const EQUIPMENT_ID_PREFIX = 'UNMSM-';
-
 export function formatEquipmentInternalId(id) {
-  const normalized = String(id ?? '').trim();
-  if (!normalized) return null;
-
-  if (normalized.startsWith(EQUIPMENT_ID_PREFIX)) {
-    return normalized;
-  }
-
-  return `${EQUIPMENT_ID_PREFIX}${normalized}`;
+  return formatInstitutionInternalId(id);
 }
 
 export function parseEquipmentInternalId(id) {
-  const normalized = String(id ?? '').trim();
-  if (!normalized) return null;
-
-  if (normalized.startsWith(EQUIPMENT_ID_PREFIX)) {
-    return normalized.slice(EQUIPMENT_ID_PREFIX.length) || null;
-  }
-
-  return normalized;
+  return parseInstitutionInternalId(id);
 }
 
 export function toEquipmentCerifId(id) {

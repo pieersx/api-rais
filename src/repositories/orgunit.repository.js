@@ -1,8 +1,9 @@
 import pool from '../config/database.js';
 import { env } from '../config/env.js';
 import {
-  toOAIIdentifier,
-  toCerifId,
+  toInstitutionCerifId,
+  toInstitutionOAIIdentifier,
+  parseInstitutionInternalId,
   toISO8601,
   filterEmpty,
   buildDateFilter,
@@ -100,7 +101,7 @@ function buildPartOf(orgUnitId, orgUnitName) {
 
   const partOf = {
     OrgUnit: {
-      id: toCerifId(ENTITY_TYPE, orgUnitId),
+      id: toInstitutionCerifId(ENTITY_TYPE, orgUnitId),
     },
   };
 
@@ -168,13 +169,13 @@ function shouldIncludeStaticOrgUnits(from, until) {
 function createRootOrgUnitRecord() {
   return {
     header: {
-      identifier: toOAIIdentifier(ENTITY_TYPE, UNMSM_ROOT.id),
+      identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, UNMSM_ROOT.id),
       datestamp: FALLBACK_DATE,
       setSpec: 'orgunits',
     },
     metadata: {
       OrgUnit: {
-        '@id': toCerifId(ENTITY_TYPE, UNMSM_ROOT.id),
+        '@id': toInstitutionCerifId(ENTITY_TYPE, UNMSM_ROOT.id),
         '@xmlns': NAMESPACES.PERUCRIS_CERIF,
         Name: filterEmpty([buildName(UNMSM_ROOT.nombre)]),
         Acronym: UNMSM_ROOT.acronym,
@@ -203,7 +204,7 @@ function mapFacultadToCerif(row) {
   const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
 
   const orgUnit = {
-    '@id': toCerifId(ENTITY_TYPE, `F${row.id}`),
+    '@id': toInstitutionCerifId(ENTITY_TYPE, `F${row.id}`),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Name: filterEmpty([buildName(row.nombre)]),
     Type: buildDependencyTypeEntries(ORGUNIT_SUBTYPE_VALUES.RESEARCH_UNIT),
@@ -225,7 +226,7 @@ function mapInstitutoToCerif(row) {
   const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
 
   const orgUnit = {
-    '@id': toCerifId(ENTITY_TYPE, `I${row.id}`),
+    '@id': toInstitutionCerifId(ENTITY_TYPE, `I${row.id}`),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Name: filterEmpty([buildName(row.instituto)]),
     Type: buildDependencyTypeEntries(ORGUNIT_SUBTYPE_VALUES.RESEARCH_UNIT),
@@ -247,7 +248,7 @@ function mapInstitutoToCerif(row) {
  */
 function mapLaboratorioToCerif(row) {
   const orgUnit = {
-    '@id': toCerifId(ENTITY_TYPE, `L${row.id}`),
+    '@id': toInstitutionCerifId(ENTITY_TYPE, `L${row.id}`),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Name: filterEmpty([buildName(row.laboratorio)]),
     Type: buildDependencyTypeEntries(ORGUNIT_SUBTYPE_VALUES.RESEARCH_UNIT),
@@ -291,7 +292,7 @@ function mapLineaInvestigacionToCerif(row) {
   const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
 
   const orgUnit = {
-    '@id': toCerifId(ENTITY_TYPE, `LI${row.id}`),
+    '@id': toInstitutionCerifId(ENTITY_TYPE, `LI${row.id}`),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Name: filterEmpty([buildName(row.nombre)]),
     Type: buildDependencyTypeEntries(ORGUNIT_SUBTYPE_VALUES.RESEARCH_LINE),
@@ -331,7 +332,7 @@ function mapGrupoToCerif(row) {
   const lastModified = toISO8601(row.updated_at) || FALLBACK_DATE;
 
   const orgUnit = {
-    '@id': toCerifId(ENTITY_TYPE, `G${row.id}`),
+    '@id': toInstitutionCerifId(ENTITY_TYPE, `G${row.id}`),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Name: filterEmpty([buildName(row.grupo_nombre)]),
     Type: buildDependencyTypeEntries(ORGUNIT_SUBTYPE_VALUES.RESEARCH_GROUP),
@@ -445,7 +446,7 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
     for (const f of facultades) {
       staticRecords.push({
         header: {
-          identifier: toOAIIdentifier(ENTITY_TYPE, `F${f.id}`),
+          identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, `F${f.id}`),
           datestamp: FALLBACK_DATE,
           setSpec: 'orgunits',
         },
@@ -466,7 +467,7 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
     for (const inst of institutos) {
       staticRecords.push({
         header: {
-          identifier: toOAIIdentifier(ENTITY_TYPE, `I${inst.id}`),
+          identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, `I${inst.id}`),
           datestamp: FALLBACK_DATE,
           setSpec: 'orgunits',
         },
@@ -488,7 +489,7 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
     for (const lab of laboratorios) {
       staticRecords.push({
         header: {
-          identifier: toOAIIdentifier(ENTITY_TYPE, `L${lab.id}`),
+          identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, `L${lab.id}`),
           datestamp: FALLBACK_DATE,
           setSpec: 'orgunits',
         },
@@ -515,7 +516,7 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
     for (const linea of lineas) {
       staticRecords.push({
         header: {
-          identifier: toOAIIdentifier(ENTITY_TYPE, `LI${linea.id}`),
+          identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, `LI${linea.id}`),
           datestamp: toISO8601(linea.updated_at) || FALLBACK_DATE,
           setSpec: 'orgunits',
         },
@@ -554,7 +555,7 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
     for (const g of grupos) {
       results.push({
         header: {
-          identifier: toOAIIdentifier(ENTITY_TYPE, `G${g.id}`),
+          identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, `G${g.id}`),
           datestamp: toISO8601(g.updated_at) || FALLBACK_DATE,
           setSpec: 'orgunits',
         },
@@ -585,17 +586,20 @@ export async function getOrgUnitHeaders({ from, until, offset = 0, limit = env.P
  * @returns {Promise<object|null>}
  */
 export async function getOrgUnitById(id) {
+  const orgUnitId = parseInstitutionInternalId(id);
+  if (!orgUnitId) return null;
+
   // UNMSM root
-  if (id === '1' || id === 1) {
+  if (orgUnitId === '1') {
     return createRootOrgUnitRecord();
   }
 
-  const prefix = id.charAt(0);
-  const numId = id.substring(1);
+  const prefix = orgUnitId.charAt(0);
+  const numId = orgUnitId.substring(1);
 
   // Linea de investigacion
-  if (id.startsWith('LI')) {
-    const lineaId = id.substring(2);
+  if (orgUnitId.startsWith('LI')) {
+    const lineaId = orgUnitId.substring(2);
     const [rows] = await pool.query(`
       SELECT
         li.*,
@@ -613,7 +617,7 @@ export async function getOrgUnitById(id) {
 
     return {
       header: {
-        identifier: toOAIIdentifier(ENTITY_TYPE, id),
+        identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, orgUnitId),
         datestamp: toISO8601(rows[0].updated_at) || FALLBACK_DATE,
         setSpec: 'orgunits',
       },
@@ -630,7 +634,7 @@ export async function getOrgUnitById(id) {
 
     return {
       header: {
-        identifier: toOAIIdentifier(ENTITY_TYPE, id),
+        identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, orgUnitId),
         datestamp: FALLBACK_DATE,
         setSpec: 'orgunits',
       },
@@ -652,7 +656,7 @@ export async function getOrgUnitById(id) {
 
     return {
       header: {
-        identifier: toOAIIdentifier(ENTITY_TYPE, id),
+        identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, orgUnitId),
         datestamp: FALLBACK_DATE,
         setSpec: 'orgunits',
       },
@@ -676,7 +680,7 @@ export async function getOrgUnitById(id) {
 
     return {
       header: {
-        identifier: toOAIIdentifier(ENTITY_TYPE, id),
+        identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, orgUnitId),
         datestamp: FALLBACK_DATE,
         setSpec: 'orgunits',
       },
@@ -698,7 +702,7 @@ export async function getOrgUnitById(id) {
 
     return {
       header: {
-        identifier: toOAIIdentifier(ENTITY_TYPE, id),
+        identifier: toInstitutionOAIIdentifier(ENTITY_TYPE, orgUnitId),
         datestamp: toISO8601(rows[0].updated_at) || FALLBACK_DATE,
         setSpec: 'orgunits',
       },
