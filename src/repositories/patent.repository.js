@@ -60,7 +60,7 @@ function mapToCerif(row, inventors = [], holders = []) {
     '@id': toInstitutionCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Type: {
-      Scheme: VOCABULARIES.COAR_PATENT_TYPES,
+      '@xmlns': VOCABULARIES.COAR_PATENT_TYPES,
       Value: typeUri,
     },
     CountryCode: 'PE',
@@ -81,46 +81,39 @@ function mapToCerif(row, inventors = [], holders = []) {
   if (inventors.length > 0) {
     patent.Inventors = {
       Inventor: inventors.map((inventor) => {
-        const fullName = [
-          inventor.nombres,
-          inventor.apellido1,
-          inventor.apellido2,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .trim()
+        const familyNames = [inventor.apellido1, inventor.apellido2].filter(Boolean).join(' ').trim()
+        const firstNames = inventor.nombres ? String(inventor.nombres).trim() : ''
+        const fullName = [inventor.nombres, inventor.apellido1, inventor.apellido2].filter(Boolean).join(' ').trim()
 
-        const person = {
-          PersonName: {
-            FullName: normalizeDisplayText(fullName),
-          },
+        const personName = {}
+        if (familyNames && firstNames) {
+          personName.FamilyNames = normalizeDisplayText(familyNames)
+          personName.FirstNames = normalizeDisplayText(firstNames)
+        } else if (fullName) {
+          personName.FullName = normalizeDisplayText(fullName)
         }
+
+        const person = { PersonName: personName }
 
         if (inventor.investigador_id) {
           person.id = toInstitutionCerifId('Persons', inventor.investigador_id)
         }
 
-        const identifiers = []
-        if (inventor.doc_numero) {
-          identifiers.push(
-            createSchemeValueEntry(
-              'http://purl.org/pe-repo/concytec/terminos#dni',
-              inventor.doc_numero
-            )
-          )
-        }
-        if (inventor.codigo_orcid) {
-          identifiers.push(
-            createSchemeValueEntry(
-              'https://orcid.org',
-              normalizeOrcid(inventor.codigo_orcid)
-            )
-          )
+        const orcid = normalizeOrcid(inventor.codigo_orcid)
+        if (orcid) {
+          person.ORCID = orcid
         }
 
-        const filteredIdentifiers = filterEmpty(identifiers)
-        if (filteredIdentifiers.length > 0) {
-          person.Identifier = filteredIdentifiers
+        const identifiers = []
+        if (inventor.doc_numero) {
+          identifiers.push({
+            '@type': 'http://purl.org/pe-repo/concytec/terminos#dni',
+            Value: String(inventor.doc_numero).trim()
+          })
+        }
+
+        if (identifiers.length > 0) {
+          person.Identifier = identifiers
         }
 
         return { Person: person }
