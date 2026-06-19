@@ -14,7 +14,8 @@ import {
   toISO8601,
 } from '../utils/formatters.js'
 
-const ENTITY_TYPE = "Patents"
+const ENTITY_TYPE = 'Patents'
+const PATENT_HAS_REAL_IPC_SQL = 'FALSE'
 const PATENT_ELIGIBILITY_SQL = `
   p.estado = 1
   AND TRIM(COALESCE(p.nro_registro, '')) <> ''
@@ -59,7 +60,7 @@ function mapToCerif(row, inventors = [], holders = []) {
     '@id': toInstitutionCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Type: {
-      '@xmlns': VOCABULARIES.COAR_PATENT_TYPES,
+      Scheme: VOCABULARIES.COAR_PATENT_TYPES,
       Value: typeUri,
     },
     CountryCode: 'PE',
