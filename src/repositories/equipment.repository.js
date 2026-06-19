@@ -25,6 +25,8 @@ const FALLBACK_DATE = '2014-01-01T00:00:00Z';
 const ROOT_ORGUNIT_ID = toInstitutionCerifId('OrgUnits', '1');
 const ROOT_ORGUNIT_NAME = 'Universidad Nacional Mayor de San Marcos';
 const EQUIPMENT_TYPE_SCHEME = VOCABULARIES.CONCYTEC_EQUIPMENT_TYPES;
+const EQUIPMENT_EXCLUSION_REGEXP = 'mesa|estante|mouse|teclado|keyboard|parlante|webcam|monitor|proyector|router|televisor|tel[eé]fono|aire acondicionado|tablet|laptop|computadora port[aá]til|computadora personal|microcomputadora|modulo de computadora|m[oó]dulo de computadora|impresora laser|impresora multifuncional|copiadora|scanner|fax|ups';
+const EQUIPMENT_PRESERVE_REGEXP = 'impresora 3d|servidor|workstation|think station|alto desempe[nñ]o|cluster|gpu';
 
 function normalizeText(value) {
   return String(value || '')
@@ -60,6 +62,20 @@ function getEquipmentType(row) {
   }
 
   return `${EQUIPMENT_TYPE_SCHEME}#otrosEquipamientos`;
+}
+
+function getEquipmentEligibilitySql(alias = 'gi') {
+  return `
+    LOWER(TRIM(${alias}.categoria)) = 'equipo'
+    AND NOT (
+      LOWER(CONCAT_WS(' ', ${alias}.nombre, ${alias}.descripcion, ${alias}.ubicacion)) REGEXP ?
+      AND LOWER(CONCAT_WS(' ', ${alias}.nombre, ${alias}.descripcion, ${alias}.ubicacion)) NOT REGEXP ?
+    )
+  `;
+}
+
+function getEquipmentEligibilityParams() {
+  return [EQUIPMENT_EXCLUSION_REGEXP, EQUIPMENT_PRESERVE_REGEXP];
 }
 
 function buildOwner(row) {
@@ -120,7 +136,7 @@ function mapToCerif(row) {
   }
 
   const names = filterEmpty([
-    createTextValueEntry(nombre || `Equipamiento ${row.id}`, 'es'),
+    createTextValueEntry(normalizeDisplayText(nombre) || `Equipamiento ${row.id}`, 'es'),
   ]);
   if (names.length > 0) {
     equipment.Name = names;
@@ -151,14 +167,16 @@ export async function countEquipment(from, until) {
   let query = `
     SELECT COUNT(*) as total
     FROM Grupo_infraestructura gi
-    WHERE LOWER(TRIM(gi.categoria)) = 'equipo'
+    WHERE ${getEquipmentEligibilitySql('gi')}
   `;
+  const params = getEquipmentEligibilityParams();
 
   if (dateFilter.clause) {
     query += ` AND ${dateFilter.clause}`;
+    params.push(...dateFilter.params);
   }
 
-  const [rows] = await pool.query(query, dateFilter.params);
+  const [rows] = await pool.query(query, params);
   return rows[0].total;
 }
 
@@ -187,16 +205,18 @@ export async function getEquipment({ from, until, offset = 0, limit = env.PAGE_S
       gi.updated_at
     FROM Grupo_infraestructura gi
     LEFT JOIN Grupo g ON gi.grupo_id = g.id
-    WHERE LOWER(TRIM(gi.categoria)) = 'equipo'
+    WHERE ${getEquipmentEligibilitySql('gi')}
   `;
+  const params = getEquipmentEligibilityParams();
 
   if (dateFilter.clause) {
     query += ` AND ${dateFilter.clause}`;
+    params.push(...dateFilter.params);
   }
 
   query += ' ORDER BY gi.id LIMIT ? OFFSET ?';
 
-  const [rows] = await pool.query(query, [...dateFilter.params, limit, offset]);
+  const [rows] = await pool.query(query, [...params, limit, offset]);
 
   return rows.map(row => ({
     header: {
@@ -221,16 +241,18 @@ export async function getEquipmentHeaders({ from, until, offset = 0, limit = env
   let query = `
     SELECT gi.id, gi.updated_at
     FROM Grupo_infraestructura gi
-    WHERE LOWER(TRIM(gi.categoria)) = 'equipo'
+    WHERE ${getEquipmentEligibilitySql('gi')}
   `;
+  const params = getEquipmentEligibilityParams();
 
   if (dateFilter.clause) {
     query += ` AND ${dateFilter.clause}`;
+    params.push(...dateFilter.params);
   }
 
   query += ' ORDER BY gi.id LIMIT ? OFFSET ?';
 
-  const [rows] = await pool.query(query, [...dateFilter.params, limit, offset]);
+  const [rows] = await pool.query(query, [...params, limit, offset]);
 
   return rows.map(row => ({
     identifier: toEquipmentOAIIdentifier(row.id),
@@ -267,9 +289,9 @@ export async function getEquipmentById(id) {
       FROM Grupo_infraestructura gi
       LEFT JOIN Grupo g ON gi.grupo_id = g.id
       WHERE gi.id = ?
-        AND LOWER(TRIM(gi.categoria)) = 'equipo'
+        AND ${getEquipmentEligibilitySql('gi')}
     `,
-    [equipmentId]
+    [equipmentId, ...getEquipmentEligibilityParams()]
   );
 
   if (rows.length === 0) {

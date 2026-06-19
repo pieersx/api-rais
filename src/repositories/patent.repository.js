@@ -1,12 +1,11 @@
 import pool from '../config/database.js'
 import { env } from '../config/env.js'
-import { NAMESPACES, PATENT_TYPE_MAP } from '../utils/constants.js'
+import { NAMESPACES, PATENT_TYPE_MAP, VOCABULARIES } from '../utils/constants.js'
 import {
   buildDateFilter,
   createSchemeValueEntry,
   createTextValueEntry,
   filterEmpty,
-  inferIPCClassification,
   normalizeDisplayText,
   normalizeOrcidToken,
   parseInstitutionInternalId,
@@ -21,6 +20,7 @@ const PATENT_ELIGIBILITY_SQL = `
   AND TRIM(COALESCE(p.nro_registro, '')) <> ''
   AND TRIM(COALESCE(p.titulo, '')) <> ''
   AND p.updated_at IS NOT NULL
+  AND ${PATENT_HAS_REAL_IPC_SQL}
 `
 
 function normalizeOrcid(orcid) {
@@ -50,22 +50,18 @@ function normalizeAbstractPart(value) {
 
 function mapToCerif(row, inventors = [], holders = []) {
   const typeUri = PATENT_TYPE_MAP[row.tipo] || PATENT_TYPE_MAP.default
-  const ipcClassification = inferIPCClassification(row)
   const lastModified = toISO8601(row.updated_at)
-  const title = filterEmpty([createTextValueEntry(row.titulo, 'es')])
+  const title = filterEmpty([createTextValueEntry(normalizeDisplayText(row.titulo), 'es')])
   const patentNumber = String(row.nro_registro || '').trim()
   const abstractParts = []
 
   const patent = {
     '@id': toInstitutionCerifId(ENTITY_TYPE, row.id),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    Type: typeUri,
-    Subject: [
-      {
-        Scheme: ipcClassification.scheme,
-        Value: ipcClassification.value,
-      },
-    ],
+    Type: {
+      '@xmlns': VOCABULARIES.COAR_PATENT_TYPES,
+      Value: typeUri,
+    },
     CountryCode: 'PE',
   }
 
@@ -84,46 +80,39 @@ function mapToCerif(row, inventors = [], holders = []) {
   if (inventors.length > 0) {
     patent.Inventors = {
       Inventor: inventors.map((inventor) => {
-        const fullName = [
-          inventor.nombres,
-          inventor.apellido1,
-          inventor.apellido2,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .trim()
+        const familyNames = [inventor.apellido1, inventor.apellido2].filter(Boolean).join(' ').trim()
+        const firstNames = inventor.nombres ? String(inventor.nombres).trim() : ''
+        const fullName = [inventor.nombres, inventor.apellido1, inventor.apellido2].filter(Boolean).join(' ').trim()
 
-        const person = {
-          PersonName: {
-            FullName: normalizeDisplayText(fullName),
-          },
+        const personName = {}
+        if (familyNames && firstNames) {
+          personName.FamilyNames = normalizeDisplayText(familyNames)
+          personName.FirstNames = normalizeDisplayText(firstNames)
+        } else if (fullName) {
+          personName.FullName = normalizeDisplayText(fullName)
         }
+
+        const person = { PersonName: personName }
 
         if (inventor.investigador_id) {
           person.id = toInstitutionCerifId('Persons', inventor.investigador_id)
         }
 
-        const identifiers = []
-        if (inventor.doc_numero) {
-          identifiers.push(
-            createSchemeValueEntry(
-              'http://purl.org/pe-repo/concytec/terminos#dni',
-              inventor.doc_numero
-            )
-          )
-        }
-        if (inventor.codigo_orcid) {
-          identifiers.push(
-            createSchemeValueEntry(
-              'https://orcid.org',
-              normalizeOrcid(inventor.codigo_orcid)
-            )
-          )
+        const orcid = normalizeOrcid(inventor.codigo_orcid)
+        if (orcid) {
+          person.ORCID = orcid
         }
 
-        const filteredIdentifiers = filterEmpty(identifiers)
-        if (filteredIdentifiers.length > 0) {
-          person.Identifier = filteredIdentifiers
+        const identifiers = []
+        if (inventor.doc_numero) {
+          identifiers.push({
+            '@type': 'http://purl.org/pe-repo/concytec/terminos#dni',
+            Value: String(inventor.doc_numero).trim()
+          })
+        }
+
+        if (identifiers.length > 0) {
+          person.Identifier = identifiers
         }
 
         return { Person: person }

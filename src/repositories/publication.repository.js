@@ -280,52 +280,42 @@ function normalizeIssnValue(value) {
   return `${compact.slice(0, 4)}-${compact.slice(4)}`;
 }
 
-function humanizeThesisLevel(value) {
-  const key = normalizeTextKey(value).replace(/_/g, ' ');
-  if (!key) return null;
-  if (key.includes('maestr')) return 'Maestría';
-  if (key.includes('doctor')) return 'Doctorado';
-  if (key.includes('bachiller')) return 'Bachiller';
-  if (key.includes('titulo profesional') || key.includes('título profesional')) return 'Título profesional';
-  if (key.includes('licenciatura')) return 'Licenciatura';
-  if (key.includes('segunda especialidad')) return 'Segunda especialidad';
-  return String(value).trim();
-}
-
 function buildTopLevelIdentifiers(row) {
   const publicationType = normalizePublicationType(row.tipo_publicacion);
-  const identifiers = filterEmpty([
-    normalizeDoiValue(row.doi) ? { Type: 'DOI', Value: normalizeDoiValue(row.doi) } : null,
-    normalizeHandleValue(row.uri) ? { Type: 'Handle', Value: normalizeHandleValue(row.uri) } : null,
-    !CONTAINER_IDENTIFIER_PUBLICATION_TYPES.has(publicationType) && normalizeIsbnValue(row.isbn)
-      ? { Type: 'ISBN', Value: normalizeIsbnValue(row.isbn) }
-      : null,
-    !CONTAINER_IDENTIFIER_PUBLICATION_TYPES.has(publicationType) && normalizeIssnValue(row.issn)
-      ? { Type: 'ISSN', Value: normalizeIssnValue(row.issn) }
-      : null,
-    !CONTAINER_IDENTIFIER_PUBLICATION_TYPES.has(publicationType) && normalizeIssnValue(row.issn_e)
-      ? { Type: 'ISSN', Value: normalizeIssnValue(row.issn_e) }
-      : null,
+  const identifiers = {};
+  const doi = normalizeDoiValue(row.doi);
+  const handle = normalizeHandleValue(row.uri);
+  const isbn = normalizeIsbnValue(row.isbn);
+  const issnValues = filterEmpty([
+    normalizeIssnValue(row.issn),
+    normalizeIssnValue(row.issn_e),
   ]);
+  const url = normalizeUrlValue(row.url);
 
-  return dedupeTypedIdentifiers(identifiers);
-}
-
-function dedupeTypedIdentifiers(identifiers) {
-  const seen = new Set();
-  const result = [];
-
-  for (const identifier of identifiers) {
-    if (!identifier) continue;
-
-    const key = `${String(identifier.Type).toLowerCase()}::${String(identifier.Value).toLowerCase()}`;
-    if (seen.has(key)) continue;
-
-    seen.add(key);
-    result.push(identifier);
+  if (doi) {
+    identifiers.DOI = doi;
+  }
+  if (handle) {
+    identifiers.Handle = handle;
+  }
+  if (!CONTAINER_IDENTIFIER_PUBLICATION_TYPES.has(publicationType) && isbn) {
+    identifiers.ISBN = [isbn];
+  }
+  if (!CONTAINER_IDENTIFIER_PUBLICATION_TYPES.has(publicationType) && issnValues.length > 0) {
+    identifiers.ISSN = [...new Set(issnValues)];
+  }
+  if (url) {
+    identifiers.URL = url;
   }
 
-  return result;
+  return identifiers;
+}
+
+function normalizeUrlValue(value) {
+  const identifier = normalizeIdentifierValue(value);
+  if (!identifier) return null;
+  if (!/^https?:\/\/\S+$/i.test(identifier)) return null;
+  return identifier;
 }
 
 function parseEditorNames(rawEditors) {
@@ -372,19 +362,31 @@ function buildPersonFromAuthor(author) {
     author.investigador_doc_numero || author.doc_numero
       ? createSchemeValueEntry('http://purl.org/pe-repo/concytec/terminos#dni', author.investigador_doc_numero || author.doc_numero)
       : null,
-    normalizeOrcid(author.investigador_codigo_orcid || author.codigo_orcid)
-      ? createSchemeValueEntry('https://orcid.org', normalizeOrcid(author.investigador_codigo_orcid || author.codigo_orcid))
-      : null,
-    author.investigador_researcher_id
-      ? createSchemeValueEntry('https://w3id.org/cerif/vocab/IdentifierTypes#ResearcherID', author.investigador_researcher_id)
-      : null,
-    author.investigador_scopus_id
-      ? createSchemeValueEntry('https://w3id.org/cerif/vocab/IdentifierTypes#ScopusAuthorID', author.investigador_scopus_id)
-      : null,
   ]);
 
   if (personIdentifiers.length > 0) {
     person.Identifier = personIdentifiers;
+  }
+
+  const orcid = normalizeOrcid(author.investigador_codigo_orcid || author.codigo_orcid);
+  if (orcid) {
+    person.ORCID = orcid;
+  }
+
+  const researcherId = createSchemeValueEntry(
+    'https://w3id.org/cerif/vocab/IdentifierTypes#ResearcherID',
+    author.investigador_researcher_id
+  );
+  if (researcherId) {
+    person.ResearcherID = researcherId;
+  }
+
+  const scopusAuthorId = createSchemeValueEntry(
+    'https://w3id.org/cerif/vocab/IdentifierTypes#ScopusAuthorID',
+    author.investigador_scopus_id
+  );
+  if (scopusAuthorId) {
+    person.ScopusAuthorID = scopusAuthorId;
   }
 
   const emails = filterEmpty([
@@ -421,19 +423,41 @@ function buildAuthorEntry(author) {
       },
     };
 
-    if (author.categoria) {
-      affiliation.Role = String(author.categoria).trim();
-    }
-
-    normalizedEntry.Affiliation = [affiliation];
+    person.Affiliation = [affiliation];
   }
 
   return normalizedEntry;
 }
 
+function isOrgUnitEditorName(value) {
+  const key = normalizeTextKey(value);
+  if (!key) return false;
+
+  return [
+    'editorial',
+    'universidad',
+    'facultad',
+    'instituto',
+    'centro',
+    'departamento',
+    'direccion',
+    'oficina',
+    'unmsm',
+    'san marcos',
+  ].some(token => key.includes(token));
+}
+
 function buildEditorEntryFromName(name) {
   const fullName = String(name || '').trim();
   if (!fullName) return null;
+
+  if (isOrgUnitEditorName(fullName)) {
+    return {
+      OrgUnit: {
+        Name: filterEmpty([createTextValueEntry(fullName, 'es')]),
+      },
+    };
+  }
 
   return {
     Person: {
@@ -444,10 +468,45 @@ function buildEditorEntryFromName(name) {
   };
 }
 
+function isUnmsmGrantor(value) {
+  const key = normalizeTextKey(value);
+  if (!key) return false;
+
+  return key.includes('universidad nacional mayor de san marcos')
+    || key.includes('unmsm')
+    || key.includes('u.n.m.s.m');
+}
+
+function buildGrantor(grantorName) {
+  if (isUnmsmGrantor(grantorName)) {
+    return {
+      OrgUnit: {
+        id: toInstitutionCerifId('OrgUnits', '1'),
+        Name: filterEmpty([
+          createTextValueEntry('Universidad Nacional Mayor de San Marcos', 'es'),
+        ]),
+      },
+    };
+  }
+
+  return {
+    OrgUnit: {
+      Name: filterEmpty([createTextValueEntry(grantorName, 'es')]),
+    },
+  };
+}
+
+function normalizePageValue(value) {
+  const normalized = normalizeIdentifierValue(value);
+  if (!normalized) return null;
+  if (/^0+$/.test(normalized)) return null;
+  return normalized;
+}
+
 function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes = [] } = {}) {
   const typeUri = mapCoarPublicationType(row);
   const lastModified = toISO8601(row.updated_at);
-  const titleValue = row.titulo ? String(row.titulo).trim() : '';
+  const titleValue = normalizeDisplayText(row.titulo) || '';
   const language = parseLanguage(row.idioma);
   const thesisPublication = isThesisPublication(row);
   const access = resolveExplicitAccess(row) || inferAccessRights(row).uri;
@@ -485,10 +544,9 @@ function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes 
     publication.LastModified = lastModified;
   }
 
-  const dedupedIdentifiers = buildTopLevelIdentifiers(row);
-
-  if (dedupedIdentifiers.length > 0) {
-    publication.Identifier = dedupedIdentifiers;
+  const topLevelIdentifiers = buildTopLevelIdentifiers(row);
+  for (const [field, value] of Object.entries(topLevelIdentifiers)) {
+    publication[field] = value;
   }
 
   if (authors.length > 0) {
@@ -551,7 +609,6 @@ function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes 
   if (thesisPublication) {
     const qualification = {};
     const renatiLevelUri = mapRenatiLevelUri(row.tipo_tesis);
-    const qualificationTitle = humanizeThesisLevel(row.tipo_tesis || row.tipo_doc);
 
     if (renatiLevelUri) {
       qualification.Type = {
@@ -560,18 +617,10 @@ function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes 
       };
     }
 
-    if (qualificationTitle) {
-      qualification.Title = filterEmpty([createTextValueEntry(qualificationTitle, 'es')]);
-    }
-
     const grantorName = row.universidad ? String(row.universidad).trim() : '';
 
     if (grantorName) {
-      qualification.Grantor = {
-        OrgUnit: {
-          Name: filterEmpty([createTextValueEntry(grantorName, 'es')]),
-        },
-      };
+      qualification.Grantor = buildGrantor(grantorName);
     }
 
     if (Object.keys(qualification).length > 0) {
@@ -591,7 +640,7 @@ function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes 
     };
 
     if (containerTitle) {
-      embeddedPublication.Title = filterEmpty([createTextValueEntry(String(containerTitle), 'es')]);
+      embeddedPublication.Title = filterEmpty([createTextValueEntry(normalizeDisplayText(containerTitle), 'es')]);
     }
 
     if (containerIssn.length > 0) {
@@ -610,7 +659,7 @@ function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes 
     };
 
     if (row.nombre_libro) {
-      partOfPublication.Title = filterEmpty([createTextValueEntry(String(row.nombre_libro), 'es')]);
+      partOfPublication.Title = filterEmpty([createTextValueEntry(normalizeDisplayText(row.nombre_libro), 'es')]);
     }
 
     const partOfIsbn = normalizeIsbnValue(row.isbn);
@@ -649,8 +698,10 @@ function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes 
       publication.Edition = String(row.edicion);
     }
   }
-  if (row.pagina_inicial) publication.StartPage = String(row.pagina_inicial);
-  if (row.pagina_final) publication.EndPage = String(row.pagina_final);
+  const startPage = normalizePageValue(row.pagina_inicial);
+  const endPage = normalizePageValue(row.pagina_final);
+  if (startPage) publication.StartPage = startPage;
+  if (endPage) publication.EndPage = endPage;
 
   if (language) {
     publication.Language = language;
@@ -666,7 +717,7 @@ function mapToCerif(row, { authors = [], keywords = [], origins = [], ocdeCodes 
   }
 
   if (keywords.length > 0) {
-    publication.Keywords = keywords
+    publication.Keyword = keywords
       .map(keyword => String(keyword.palabra_clave || '').trim())
       .filter(Boolean)
       .map(value => createTextValueEntry(value, language || 'es'));
