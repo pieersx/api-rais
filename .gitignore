@@ -66,3 +66,6 @@ database/dumps/**
 !database/dumps/raw/.gitkeep
 !database/dumps/aws-rds/
 !database/dumps/aws-rds/.gitkeep
+
+# Local export artifacts
+exports/
