@@ -113,8 +113,8 @@ function buildFundingTypeEntry(value) {
   if (!value) return null;
 
   return {
-    Scheme: VOCABULARIES.OPENAIRE_FUNDING_TYPES,
-    Value: value,
+    '@xmlns': VOCABULARIES.OPENAIRE_FUNDING_TYPES,
+    '#text': value,
   };
 }
 
@@ -475,7 +475,7 @@ function mapToCerif(row) {
   }
 
   if (row.tipo_proyecto) {
-    funding.Keywords = filterEmpty([
+    funding.Keyword = filterEmpty([
       createTextValueEntry(row.tipo_proyecto, null),
     ]);
   }

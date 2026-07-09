@@ -32,7 +32,7 @@ const ROOT_ORGUNIT = {
   id: toInstitutionCerifId('OrgUnits', '1'),
   Name: 'Universidad Nacional Mayor de San Marcos',
 };
-const EQUIPMENT_EXCLUSION_REGEXP = 'mesa|estante|mouse|teclado|keyboard|parlante|webcam|monitor|proyector|router|televisor|tel[eé]fono|aire acondicionado|tablet|laptop|computadora port[aá]til|computadora personal|microcomputadora|modulo de computadora|m[oó]dulo de computadora|impresora laser|impresora multifuncional|copiadora|scanner|fax|ups';
+const EQUIPMENT_EXCLUSION_REGEXP = 'archivador|armario|deshumedecedor|silla|sill[oó]n|cpu|unidad central de proceso|refrigeradora el[eé]ctrica dom[eé]stica|refrigeradora dom[eé]stica|secadora|mesa|estante|mouse|teclado|keyboard|parlante|webcam|monitor|proyector|router|televisor|tel[eé]fono|aire acondicionado|tablet|laptop|computadora port[aá]til|computadora personal|microcomputadora|modulo de computadora|m[oó]dulo de computadora|impresora laser|impresora multifuncional|copiadora|scanner|fax|ups';
 const EQUIPMENT_PRESERVE_REGEXP = 'impresora 3d|servidor|workstation|think station|alto desempe[nñ]o|cluster|gpu';
 const EXTERNAL_FUNDING_TOTAL = `
   (
@@ -422,7 +422,9 @@ function mapToCerif(row, integrantes = [], ocde = null, abstract = null, equipme
   const geoLocationPlace = normalizeProjectGeoLocation(row.localizacion);
   if (geoLocationPlace) {
     project.geoLocation = [{
-      geoLocationPlace,
+      geoLocationPlace: {
+        Value: geoLocationPlace,
+      },
     }];
   }
 

@@ -23,6 +23,8 @@ import {
 
 const ENTITY_TYPE = 'OrgUnits';
 const FALLBACK_DATE = '2014-01-01T00:00:00Z';
+const EXCLUDED_FACULTAD_IDS = new Set([9999]);
+const EXCLUDED_INSTITUTO_IDS = new Set([2101]);
 
 function normalizeRorValue(value) {
   if (!value) return null;
@@ -80,8 +82,30 @@ function buildIdentifier(scheme, value) {
   return createSchemeValueEntry(scheme, value);
 }
 
+function buildUbiGeo(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return null;
+
+  const uri = normalized.startsWith(`${VOCABULARIES.ORGUNIT_UBIGEO}#`)
+    ? normalized
+    : `${VOCABULARIES.ORGUNIT_UBIGEO}#${normalized}`;
+
+  return buildIdentifier(VOCABULARIES.ORGUNIT_UBIGEO, uri);
+}
+
 function buildName(value, lang = 'es') {
   return createTextValueEntry(value, lang);
+}
+
+function buildFacultadName(value) {
+  const name = normalizeDisplayText(value);
+  if (!name) return null;
+
+  if (/^(facultad|escuela|instituto|vicerrectorado|universidad)\b/i.test(name)) {
+    return name;
+  }
+
+  return `Facultad de ${name}`;
 }
 
 function buildTypeValue(value, scheme = null) {
@@ -189,7 +213,7 @@ function createRootOrgUnitRecord() {
           buildIdentifier('https://w3id.org/cerif/vocab/IdentifierTypes#ScopusAffiliationID', UNMSM_ROOT.scopusAffiliationId),
         ]),
         CountryCode: UNMSM_ROOT.countryCode,
-        UbiGeo: buildIdentifier(VOCABULARIES.ORGUNIT_UBIGEO, UNMSM_ROOT.ubigeo),
+        UbiGeo: buildUbiGeo(UNMSM_ROOT.ubigeo),
       },
     },
   };
@@ -206,9 +230,9 @@ function mapFacultadToCerif(row) {
   const orgUnit = {
     '@id': toInstitutionCerifId(ENTITY_TYPE, `F${row.id}`),
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
-    Name: filterEmpty([buildName(row.nombre)]),
+    Name: filterEmpty([buildName(buildFacultadName(row.nombre))]),
     Type: buildDependencyTypeEntries(ORGUNIT_SUBTYPE_VALUES.RESEARCH_UNIT),
-    UbiGeo: buildIdentifier(VOCABULARIES.ORGUNIT_UBIGEO, UNMSM_CODES.UBIGEO_LIMA),
+    UbiGeo: buildUbiGeo(UNMSM_CODES.UBIGEO_LIMA),
     LastModified: lastModified,
   };
 
@@ -230,7 +254,7 @@ function mapInstitutoToCerif(row) {
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Name: filterEmpty([buildName(row.instituto)]),
     Type: buildDependencyTypeEntries(ORGUNIT_SUBTYPE_VALUES.RESEARCH_UNIT),
-    UbiGeo: buildIdentifier(VOCABULARIES.ORGUNIT_UBIGEO, UNMSM_CODES.UBIGEO_LIMA),
+    UbiGeo: buildUbiGeo(UNMSM_CODES.UBIGEO_LIMA),
     LastModified: lastModified,
   };
 
@@ -252,8 +276,8 @@ function mapLaboratorioToCerif(row) {
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Name: filterEmpty([buildName(row.laboratorio)]),
     Type: buildDependencyTypeEntries(ORGUNIT_SUBTYPE_VALUES.RESEARCH_UNIT),
-    UbiGeo: buildIdentifier(VOCABULARIES.ORGUNIT_UBIGEO, UNMSM_CODES.UBIGEO_LIMA),
-    Keywords: [{ Value: 'Laboratorio' }],
+    UbiGeo: buildUbiGeo(UNMSM_CODES.UBIGEO_LIMA),
+    Keyword: [{ Value: 'Laboratorio' }],
     LastModified: FALLBACK_DATE,
   };
 
@@ -296,7 +320,7 @@ function mapLineaInvestigacionToCerif(row) {
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Name: filterEmpty([buildName(row.nombre)]),
     Type: buildDependencyTypeEntries(ORGUNIT_SUBTYPE_VALUES.RESEARCH_LINE),
-    UbiGeo: buildIdentifier(VOCABULARIES.ORGUNIT_UBIGEO, UNMSM_CODES.UBIGEO_LIMA),
+    UbiGeo: buildUbiGeo(UNMSM_CODES.UBIGEO_LIMA),
     LastModified: lastModified,
   };
 
@@ -336,7 +360,7 @@ function mapGrupoToCerif(row) {
     '@xmlns': NAMESPACES.PERUCRIS_CERIF,
     Name: filterEmpty([buildName(row.grupo_nombre)]),
     Type: buildDependencyTypeEntries(ORGUNIT_SUBTYPE_VALUES.RESEARCH_GROUP),
-    UbiGeo: buildIdentifier(VOCABULARIES.ORGUNIT_UBIGEO, UNMSM_CODES.UBIGEO_LIMA),
+    UbiGeo: buildUbiGeo(UNMSM_CODES.UBIGEO_LIMA),
     LastModified: lastModified,
   };
 
@@ -374,7 +398,7 @@ function mapGrupoToCerif(row) {
   }
 
   if (row.grupo_categoria) {
-    orgUnit.Keywords = [{ Value: String(row.grupo_categoria).trim() }];
+    orgUnit.Keyword = [{ Value: String(row.grupo_categoria).trim() }];
   }
 
   return orgUnit;
@@ -402,10 +426,10 @@ export async function countOrgUnits(from, until) {
   }
 
   // Contar facultades (sin updated_at en origen)
-  const [facultades] = await pool.query('SELECT COUNT(*) as total FROM Facultad');
+  const [facultades] = await pool.query('SELECT COUNT(*) as total FROM Facultad WHERE id NOT IN (9999)');
 
   // Contar institutos activos (sin updated_at en origen)
-  const [institutos] = await pool.query('SELECT COUNT(*) as total FROM Instituto WHERE estado = 1');
+  const [institutos] = await pool.query('SELECT COUNT(*) as total FROM Instituto WHERE estado = 1 AND id NOT IN (2101)');
 
   // Contar laboratorios con nombre (sin updated_at en origen)
   const [laboratorios] = await pool.query(`
@@ -442,7 +466,7 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
   if (includeStatic && remaining > 0) {
     const staticRecords = [createRootOrgUnitRecord()];
 
-    const [facultades] = await pool.query('SELECT * FROM Facultad ORDER BY id');
+    const [facultades] = await pool.query('SELECT * FROM Facultad WHERE id NOT IN (9999) ORDER BY id');
     for (const f of facultades) {
       staticRecords.push({
         header: {
@@ -461,6 +485,7 @@ export async function getOrgUnits({ from, until, offset = 0, limit = env.PAGE_SI
       FROM Instituto i
       LEFT JOIN Facultad f ON i.facultad_id = f.id
       WHERE i.estado = 1
+        AND i.id NOT IN (2101)
       ORDER BY i.id
     `);
 
@@ -629,6 +654,8 @@ export async function getOrgUnitById(id) {
 
   // Facultad
   if (prefix === 'F') {
+    if (EXCLUDED_FACULTAD_IDS.has(Number(numId))) return null;
+
     const [rows] = await pool.query('SELECT * FROM Facultad WHERE id = ?', [numId]);
     if (rows.length === 0) return null;
 
@@ -646,6 +673,8 @@ export async function getOrgUnitById(id) {
 
   // Instituto
   if (prefix === 'I') {
+    if (EXCLUDED_INSTITUTO_IDS.has(Number(numId))) return null;
+
     const [rows] = await pool.query(`
       SELECT i.*, f.nombre as facultad_nombre
       FROM Instituto i

@@ -63,10 +63,34 @@ const HAS_REAL_TOP_LEVEL_BOOK_OR_SERIAL_SQL = `(
     OR ${HAS_REAL_ISSNE_SQL}
   )
 )`;
+const IS_THESIS_PUBLICATION_SQL = `(
+  LOWER(TRIM(COALESCE(p.tipo_publicacion, ''))) IN ('tesis', 'tesis-asesoria')
+  OR LOWER(TRIM(COALESCE(p.tipo_doc, ''))) LIKE '%tesis%'
+)`;
+const HAS_EXPORTABLE_AUTHOR_SQL = `EXISTS (
+  SELECT 1
+  FROM Publicacion_autor pa_author
+  WHERE pa_author.publicacion_id = p.id
+    AND LOWER(TRIM(COALESCE(pa_author.categoria, ''))) IN ('autor', 'autor de correspondencia', 'tesista', '')
+    AND TRIM(CONCAT_WS(' ', COALESCE(pa_author.autor, ''), COALESCE(pa_author.nombres, ''), COALESCE(pa_author.apellido1, ''), COALESCE(pa_author.apellido2, ''))) <> ''
+)`;
+const HAS_REAL_THESIS_QUALIFICATION_SQL = `(
+  TRIM(COALESCE(p.tipo_tesis, '')) NOT IN ('', '-', '--', '---')
+)`;
 const STRICT_PUBLICATION_IDENTIFIER_SQL = `(
   ${HAS_REAL_DOI_SQL}
   OR ${HAS_REAL_HANDLE_SQL}
   OR ${HAS_REAL_TOP_LEVEL_BOOK_OR_SERIAL_SQL}
+)`;
+const STRICT_PUBLICATION_ELIGIBILITY_SQL = `(
+  ${STRICT_PUBLICATION_IDENTIFIER_SQL}
+  AND (
+    NOT ${IS_THESIS_PUBLICATION_SQL}
+    OR (
+      ${HAS_EXPORTABLE_AUTHOR_SQL}
+      AND ${HAS_REAL_THESIS_QUALIFICATION_SQL}
+    )
+  )
 )`;
 
 function normalizeOrcid(orcid) {
@@ -850,7 +874,7 @@ export async function countPublications(from, until) {
       AND p.validado = 1
       AND p.updated_at IS NOT NULL
       AND p.updated_at >= '${MIN_VALID_UPDATED_AT}'
-      AND ${STRICT_PUBLICATION_IDENTIFIER_SQL}
+      AND ${STRICT_PUBLICATION_ELIGIBILITY_SQL}
   `;
 
   if (dateFilter.clause) {
@@ -876,7 +900,7 @@ export async function getPublications({ from, until, offset = 0, limit = env.PAG
       AND p.validado = 1
       AND p.updated_at IS NOT NULL
       AND p.updated_at >= '${MIN_VALID_UPDATED_AT}'
-      AND ${STRICT_PUBLICATION_IDENTIFIER_SQL}
+      AND ${STRICT_PUBLICATION_ELIGIBILITY_SQL}
   `;
 
   if (dateFilter.clause) {
@@ -921,7 +945,7 @@ export async function getPublicationHeaders({ from, until, offset = 0, limit = e
       AND p.validado = 1
       AND p.updated_at IS NOT NULL
       AND p.updated_at >= '${MIN_VALID_UPDATED_AT}'
-      AND ${STRICT_PUBLICATION_IDENTIFIER_SQL}
+      AND ${STRICT_PUBLICATION_ELIGIBILITY_SQL}
   `;
 
   if (dateFilter.clause) {
@@ -957,7 +981,7 @@ export async function getPublicationById(id) {
         AND p.validado = 1
         AND p.updated_at IS NOT NULL
         AND p.updated_at >= ?
-        AND ${STRICT_PUBLICATION_IDENTIFIER_SQL}
+        AND ${STRICT_PUBLICATION_ELIGIBILITY_SQL}
     `,
     [publicationId, MIN_VALID_UPDATED_AT]
   );

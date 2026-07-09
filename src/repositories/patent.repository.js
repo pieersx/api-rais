@@ -15,7 +15,14 @@ import {
 } from '../utils/formatters.js'
 
 const ENTITY_TYPE = 'Patents'
-const PATENT_HAS_REAL_IPC_SQL = 'FALSE'
+const PATENT_HAS_REAL_IPC_SQL = `
+  EXISTS (
+    SELECT 1
+    FROM view_patente_ipc vpi
+    WHERE vpi.patente_id = p.id
+      AND TRIM(COALESCE(vpi.ipc_codigo, '')) <> ''
+  )
+`
 const PATENT_ELIGIBILITY_SQL = `
   p.estado = 1
   AND TRIM(COALESCE(p.nro_registro, '')) <> ''
@@ -49,7 +56,7 @@ function normalizeAbstractPart(value) {
   return text.replace(/[.\s]+$/u, '')
 }
 
-function mapToCerif(row, inventors = [], holders = []) {
+function mapToCerif(row, inventors = [], holders = [], ipcClassifications = []) {
   const typeUri = PATENT_TYPE_MAP[row.tipo] || PATENT_TYPE_MAP.default
   const lastModified = toISO8601(row.updated_at)
   const title = filterEmpty([createTextValueEntry(normalizeDisplayText(row.titulo), 'es')])
@@ -76,6 +83,12 @@ function mapToCerif(row, inventors = [], holders = []) {
 
   if (lastModified) {
     patent.LastModified = lastModified
+  }
+
+  if (ipcClassifications.length > 0) {
+    patent.Subject = ipcClassifications
+      .map((ipc) => createSchemeValueEntry(ipc.ipc_scheme, ipc.ipc_value || ipc.ipc_codigo))
+      .filter(Boolean)
   }
 
   if (inventors.length > 0) {
@@ -218,6 +231,20 @@ async function getPatentContext(patentId) {
     [patentId]
   )
 
+  const [ipcClassifications] = await pool.query(
+    `
+      SELECT DISTINCT
+        ipc_codigo,
+        ipc_scheme,
+        ipc_value
+      FROM view_patente_ipc
+      WHERE patente_id = ?
+        AND TRIM(COALESCE(ipc_codigo, '')) <> ''
+      ORDER BY ipc_codigo
+    `,
+    [patentId]
+  )
+
   const mappedInventors = inventors.map((inventor) => ({
     ...inventor,
     nombres: inventor.nombres || inventor.ui_nombres,
@@ -228,6 +255,7 @@ async function getPatentContext(patentId) {
   return {
     inventors: mappedInventors,
     holders,
+    ipcClassifications,
   }
 }
 
@@ -284,7 +312,7 @@ export async function getPatents({
     results.push({
       header: buildPatentHeader(row),
       metadata: {
-        Patent: mapToCerif(row, context.inventors, context.holders),
+        Patent: mapToCerif(row, context.inventors, context.holders, context.ipcClassifications),
       },
     })
   }
@@ -351,7 +379,7 @@ export async function getPatentById(id) {
   return {
     header: buildPatentHeader(row),
     metadata: {
-      Patent: mapToCerif(row, context.inventors, context.holders),
+      Patent: mapToCerif(row, context.inventors, context.holders, context.ipcClassifications),
     },
   }
 }
