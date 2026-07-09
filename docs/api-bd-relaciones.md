@@ -45,7 +45,7 @@ Ejemplo de campos que puede devolver:
 - `ORCID`
 - `ElectronicAddress`
 - `Affiliation`
-- `Keywords`
+- `Keyword`
 
 ## 5. Como trabaja `persons` en la API
 
@@ -155,7 +155,7 @@ WHERE ui.id = ?
 | `email3` | correo | `ElectronicAddress` |
 | `researcher_id` | identificador investigador | `ResearcherID` |
 | `scopus_id` | identificador Scopus | `ScopusAuthorID` |
-| `palabras_clave` | keywords separadas por coma | `Keywords` |
+| `palabras_clave` | keywords separadas por coma | `Keyword` |
 | `estado` | filtro de exportacion | no sale directo, pero controla inclusion |
 | `updated_at` | fecha de actualizacion | `header.datestamp`, `LastModified` |
 
@@ -197,9 +197,9 @@ Todo eso
 
 | Fuente | Campo final JSON |
 | --- | --- |
-| `ui.id` | `oai:...:Persons/{id}` y `Persons/{id}` |
+| `ui.id` | `oai:...:Persons/UNMSM-{id}` y `Persons/UNMSM-{id}` |
 | `ui.updated_at` | `header.datestamp`, `LastModified` |
-| `ui.nombres` + `ui.apellido1` + `ui.apellido2` | `PersonName` |
+| `ui.nombres` + `ui.apellido1` + `ui.apellido2` | `PersonName` normalizado en altas y bajas |
 | `ui.sexo` | `Gender` |
 | `ui.doc_tipo` + `ui.doc_numero` | `Identifier` |
 | `ui.scopus_id` | `ScopusAuthorID` |
@@ -208,7 +208,7 @@ Todo eso
 | `ui.email1`, `ui.email2`, `ui.email3` | `ElectronicAddress` |
 | `f.id`, `f.nombre` | afiliacion a facultad |
 | `i.id`, `i.instituto` | afiliacion a instituto |
-| `ui.palabras_clave` | `Keywords` |
+| `ui.palabras_clave` | `Keyword` |
 
 ## 13. Ejemplos JSON reales
 
@@ -217,12 +217,12 @@ Todo eso
 ```json
 [
   {
-    "identifier": "oai:rais.unmsm.edu.pe:Persons/2",
+    "identifier": "oai:rais.unmsm.edu.pe:Persons/UNMSM-2",
     "setSpec": "persons",
     "datestamp": "2014-01-09T05:49:22Z"
   },
   {
-    "identifier": "oai:rais.unmsm.edu.pe:Persons/4",
+    "identifier": "oai:rais.unmsm.edu.pe:Persons/UNMSM-4",
     "setSpec": "persons",
     "datestamp": "2014-01-09T05:49:22Z"
   }
@@ -234,18 +234,18 @@ Todo eso
 ```json
 {
   "header": {
-    "identifier": "oai:rais.unmsm.edu.pe:Persons/2",
+    "identifier": "oai:rais.unmsm.edu.pe:Persons/UNMSM-2",
     "setSpec": "persons",
     "datestamp": "2014-01-09T05:49:22Z"
   },
   "metadata": {
     "Person": {
-      "@id": "Persons/2",
+      "@id": "Persons/UNMSM-2",
       "@xmlns": "https://purl.org/pe-repo/perucris/cerif",
       "PersonName": {
-        "FamilyNames": "ABAD PACHECO",
-        "FirstNames": "MARCIAL",
-        "FullName": "MARCIAL ABAD PACHECO"
+        "FamilyNames": "Abad Pacheco",
+        "FirstNames": "Marcial",
+        "FullName": "Marcial Abad Pacheco"
       },
       "Gender": "m",
       "LastModified": "2014-01-09T05:49:22Z",
@@ -258,19 +258,19 @@ Todo eso
       "Affiliation": [
         {
           "OrgUnit": {
-            "id": "OrgUnits/1",
+            "id": "OrgUnits/UNMSM-1",
             "name": "Universidad Nacional Mayor de San Marcos"
           }
         },
         {
           "OrgUnit": {
-            "id": "OrgUnits/F12",
-            "name": "Ciencias Económicas"
+            "id": "OrgUnits/UNMSM-F12",
+            "name": "Facultad de Ciencias Económicas"
           }
         },
         {
           "OrgUnit": {
-            "id": "OrgUnits/I1201",
+            "id": "OrgUnits/UNMSM-I1201",
             "name": "Instituto de Investigaciones Económicas"
           }
         }
@@ -285,18 +285,18 @@ Todo eso
 ```json
 {
   "header": {
-    "identifier": "oai:rais.unmsm.edu.pe:Persons/166",
+    "identifier": "oai:rais.unmsm.edu.pe:Persons/UNMSM-166",
     "setSpec": "persons",
     "datestamp": "2022-01-29T17:11:21Z"
   },
   "metadata": {
     "Person": {
-      "@id": "Persons/166",
+      "@id": "Persons/UNMSM-166",
       "@xmlns": "https://purl.org/pe-repo/perucris/cerif",
       "PersonName": {
-        "FamilyNames": "ALIAGA TOVAR",
-        "FirstNames": "JAIME RAMIRO",
-        "FullName": "JAIME RAMIRO ALIAGA TOVAR"
+        "FamilyNames": "Aliaga Tovar",
+        "FirstNames": "Jaime Ramiro",
+        "FullName": "Jaime Ramiro Aliaga Tovar"
       },
       "Gender": "m",
       "LastModified": "2022-01-29T17:11:21Z",
@@ -321,24 +321,24 @@ Todo eso
       "Affiliation": [
         {
           "OrgUnit": {
-            "id": "OrgUnits/1",
+            "id": "OrgUnits/UNMSM-1",
             "name": "Universidad Nacional Mayor de San Marcos"
           }
         },
         {
           "OrgUnit": {
-            "id": "OrgUnits/F18",
-            "name": "Psicología"
+            "id": "OrgUnits/UNMSM-F18",
+            "name": "Facultad de Psicología"
           }
         },
         {
           "OrgUnit": {
-            "id": "OrgUnits/I1801",
+            "id": "OrgUnits/UNMSM-I1801",
             "name": "Instituto de Investigaciones Psicológicas"
           }
         }
       ],
-      "Keywords": [
+      "Keyword": [
         {
           "Value": "psicometría"
         },
@@ -362,7 +362,7 @@ Todo eso
 4. `ListRecords` y `GetRecord` usan la fila completa y la convierten a `Person`
 5. los filtros mas importantes son `estado = 1` y `sexo IN ('M', 'F')`
 6. `updated_at` controla el `datestamp`
-7. la API siempre agrega la afiliacion raiz `OrgUnits/1` de UNMSM
+7. la API siempre agrega la afiliacion raiz `OrgUnits/UNMSM-1` de UNMSM
 
 ## 15. Cierre
 

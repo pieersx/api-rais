@@ -2,8 +2,8 @@
 
 ## Scope and source of truth
 - This is a single-package Node API repo (not a monorepo).
-- Prefer executable truth over prose: `package.json`, `src/index.js`, `src/utils/constants.js`, `api.http`.
-- `README.md` is partially stale (examples: `/api/oai`, `src/server.js`, old structure). Verify behavior in code before changing APIs.
+- Prefer executable truth over prose: `package.json`, `src/index.js`, `src/utils/constants.js`, `api.http`, and the current `README.md`.
+- If docs and code disagree, verify behavior in code before changing APIs.
 - For the current PeruCRIS workstream, also treat these as source-of-truth docs: `docs/Directrices-perucris.md`, `docs/Guia-para-creacion-apis-json.md`, their PDF twins, and the latest CONCYTEC Word review documents provided by the user.
 
 ## Current workstream
